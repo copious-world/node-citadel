@@ -2,7 +2,7 @@
 
 const net = require('net')
 const fs = require('fs')
-//const EventEmitter = require('events');
+const mime = require('mime/lite')
 //
 
 
@@ -486,14 +486,14 @@ class CitadelClient {
         return(output)
     }
 
-    invite_user_to_room(username) {
+    async invite_user_to_room(username) {
         let cmdstr = "INVT " + username
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    kickout_user_from_room(username) {
+    async kickout_user_from_room(username) {
         let cmdstr = "KICK " + username
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
@@ -511,7 +511,7 @@ class CitadelClient {
         return resp.status
     }
 
-    set_room_attributes(roomDescr,forget) {
+    async set_room_attributes(roomDescr,forget) {
         let cmdstr = `SETR ${roomDescr.QRname}|${roomDescr.QRpasswd}|${roomDescr.QRdirname}|`
             cmdstr += `${roomDescr.QRflags}|${forget}|${roomDescr.QRfloor}|${roomDescr.QRorder}|`
             cmdstr += `${roomDescr.QRdefaultview}|${roomDescr.QRflags2}`
@@ -520,35 +520,35 @@ class CitadelClient {
         return(output)
     }
 
-    get_room_aide() {
+    async get_room_aide() {
         let cmdstr = "GETA"
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    room_info() {
+    async room_info() {
         let cmdstr = "RINF"
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    delete_message(msgnum) {
+    async delete_message(msgnum) {
         let cmdstr = `DELE ${msgnum}`
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    move_message(msgnum,destroom,copy) {
+    async  move_message(msgnum,destroom,copy) {
         let cmdstr = `MOVE ${msgnum}|${destroom}|${copy ? '1' : '0'}`
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    create_room(for_real,roomname,type,password,floor) {
+    async create_room(for_real,roomname,type,password,floor) {
         if ( !roomname ) return(-2)
         let cmdstr = ''
         if ( password ) {
@@ -561,14 +561,14 @@ class CitadelClient {
         return(output)
     }
 
-    forget_room() {
+    async forget_room() {
         let cmdstr = "FORG"
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    system_message(message) {
+    async system_message(message) {
         let cmdstr = "MESG " + message
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
@@ -576,14 +576,14 @@ class CitadelClient {
 
     }
 
-    unvalidated_user() {
+    async unvalidated_user() {
         let cmdstr = "GNUR"
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    user_registration(username) {
+    async user_registration(username) {
         let cmdstr = "GREG"
         if (username) {
             cmdstr = "GREG " + username
@@ -593,7 +593,7 @@ class CitadelClient {
         return(output)
     }
 
-    validate_user(username,axlevel) {
+    async validate_user(username,axlevel) {
         if ( !username ) return(-2)
         if ( !axlevel ) return(-2)
         //
@@ -603,35 +603,35 @@ class CitadelClient {
         return(output)
     }
 
-    set_room_info(for_real) {
+    async set_room_info(for_real) {
         let cmdstr = `EINF ${for_real ? '1' : '2'}`
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    set_registration() {
+    async set_registration() {
         let cmdstr = 'REGI'
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    misc_check() {
+    async misc_check() {
         let cmdstr = 'CHEK'
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    delete_file(filename) {
+    async delete_file(filename) {
         let cmdstr = `DELF ${filename}`
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    move_file(filename,destroom) {
+    async move_file(filename,destroom) {
         if (!filename) return -2;
         if (!destroom) return -2;
         let cmdstr = `MOVF ${filename}|${destroom}`
@@ -640,7 +640,7 @@ class CitadelClient {
         return(output)
     }
 
-    on_line_users() {
+    async on_line_users() {
         let cmdstr = 'RWHO'
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
@@ -648,21 +648,21 @@ class CitadelClient {
     }
 
     // ---- ---- ---- ---- 
-    query_username(username) {
+    async query_username(username) {
         let cmdstr = 'QUSR ' + username
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    floor_isting() {
+    async floor_isting() {
          let cmdstr = 'LFLR'
          let resp = await this.clientWrite(cmdstr)
          let output = this.hande_generic_response(resp)
          return(output)
-     }
+    }
 
-     create_floor(name,for_real) {
+     async create_floor(name,for_real) {
         if ( !name ) return -2;
         let cmdstr = `CFLR ${name}|${for_real}`
         let resp = await this.clientWrite(cmdstr)
@@ -670,7 +670,7 @@ class CitadelClient {
         return(output)
     }
     
-    delete_floor(floornum,for_real) {
+    async delete_floor(floornum,for_real) {
         if (floornum < 0) return -1;
         let cmdstr = `KFLR ${name}|${for_real}`
         let resp = await this.clientWrite(cmdstr)
@@ -678,7 +678,7 @@ class CitadelClient {
         return(output)
     }
 
-    edit_floor(floornum,floorname) {
+    async edit_floor(floornum,floorname) {
         if ( !floorname ) return -2;
         if ( floornum < 0 ) return -1;
         let cmdstr = `EFLR ${floornum}|${floorname}`
@@ -687,7 +687,7 @@ class CitadelClient {
         return(output)
     }
 
-    identify_software(developerid,clientid,revision,software_name,hostname) {
+    async identify_software(developerid,clientid,revision,software_name,hostname) {
         if ( !floorname ) return -2;
         if ( floornum < 0 ) return -1;
         //
@@ -707,21 +707,21 @@ class CitadelClient {
 
 
     // ---- ---- ---- ---- 
-    get_instant_message() {
+    async get_instant_message() {
         let cmdstr = 'GEXP'
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    instant_message_receipt() {
+    async instant_message_receipt() {
         let cmdstr = `DEXP ${mode}`
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    get_bio(username) {
+    async get_bio(username) {
         if ( !bio ) return -2;
         let cmdstr = `RBIO ${username}`
         let resp = await this.clientWrite(cmdstr)
@@ -730,38 +730,36 @@ class CitadelClient {
     }
 
 
-    stealth_mode(mode) {
+    async stealth_mode(mode) {
         let cmdstr = `STEL ${mode}`
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    terminate_session(sid) {
+    async terminate_session(sid) {
         let cmdstr = `TERM ${sid}`
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-    terminate_server_now() {
+    async terminate_server_now() {
         let cmdstr = 'DOWN'
         let resp = await this.clientWrite(cmdstr)
         this.send_text(bio)
         return(resp.status)
     }
 
-    terminate_server_scheduled(mode) {
+    async terminate_server_scheduled(mode) {
         let cmdstr = `SCDN ${mode ? 1 : 0}`
         let resp = await this.clientWrite(cmdstr)
         let output = this.hande_generic_response(resp)
         return(output)
     }
 
-
-
     // 
-    aide_get_user_parameters(who) {
+    async aide_get_user_parameters(who) {
         let cmdstr = `AGUP ${who}`
         let resp = await this.clientWrite(cmdstr)
         if ( resp.bucket === 2 ) {
@@ -772,7 +770,7 @@ class CitadelClient {
         return(resp.status)
     }
 
-    aide_set_user_parameters(cit_user) {
+    async aide_set_user_parameters(cit_user) {
         //
         if ( !(cit_user instanceof CitadelUser) ) return -2;
         let cmdstr = `ASUP ${cit_user.fullname}|${cit_user.password}|${cit_user.flags}|`
@@ -783,7 +781,7 @@ class CitadelClient {
         return(output)
     }
 
-    aide_get_email_addresses(who) {
+    async aide_get_email_addresses(who) {
         let cmdstr = `AGEA ${who}`
         let resp = await this.clientWrite(cmdstr)
         if ( resp.bucket === 1 ) {
@@ -794,8 +792,7 @@ class CitadelClient {
     }
     
 
-
-    get_message_expiration_policy(which) {
+    async get_message_expiration_policy(which) {
         if ( (which < 0) || (which > 3) ) return -2;
         let policy = this.expiration_policies[which]
         let cmdstr = `GPEX ${policy}`
@@ -806,7 +803,7 @@ class CitadelClient {
         return(resp.status)
     }
 
-    set_message_expiration_policy(which,policy) {
+    async set_message_expiration_policy(which,policy) {
         if ( (which < 0) || (which > 3) ) return -2;
         let scope = this.policy_scope[which]
         let cmdstr = `SPEX ${scope}|${policy.expire_mode}|${policy.expire_mode}`
@@ -816,7 +813,7 @@ class CitadelClient {
     }
 
 
-    get_system_config() {
+    async get_system_config() {
         let cmdstr = `CONF GET`
         let resp = await this.clientWrite(cmdstr)
         let output =  this.hande_generic_response(resp)
@@ -825,7 +822,7 @@ class CitadelClient {
     
     
 
-    get_system_config_by_type(mimetype,listing) {
+    async get_system_config_by_type(mimetype,listing) {
         if ( !mimetype ) return -2;
         let cmdstr = `CONF GETSYS|${mimetype}`
         let resp = await this.clientWrite(cmdstr)
@@ -834,14 +831,14 @@ class CitadelClient {
     }
 
     // 
-    set_system_config_by_type(mimetype) {
+    async set_system_config_by_type(mimetype) {
         let cmdstr = `CONF PUTSYS|${mimetype}`
         let resp = await this.clientWrite(cmdstr)
         let output =  this.hande_generic_response(resp)
         return(output)
     }
 
-    set_room_network_config(session) {
+    async set_room_network_config(session) {
         if ( session < 0 ) return -2;
         let cmdstr = `SNET`
         let resp = await this.clientWrite(cmdstr)
@@ -849,7 +846,7 @@ class CitadelClient {
         return(resp.status)
     }
 
-    request_client_logout(session) { //
+    async request_client_logout(session) { //
         if ( session < 0 ) return -2;
         let cmdstr = `REQT ${session}`
         let resp = await this.clientWrite(cmdstr)
@@ -857,7 +854,7 @@ class CitadelClient {
         return(output)
     }
 
-    set_message_seen(msgnum,seen) {
+    async set_message_seen(msgnum,seen) {
         if ( msgnum < 0 ) return -2;
         let cmdstr = `SEEN ${msgnum}|${seen}`
         let resp = await this.clientWrite(cmdstr)
@@ -865,7 +862,7 @@ class CitadelClient {
         return(output)
     }
 
-    directory_lookup(address) {
+    async directory_lookup(address) {
         if ( !address ) return -2;
         let cmdstr = `QDIR ${address}`
         let resp = await this.clientWrite(cmdstr)
@@ -873,7 +870,7 @@ class CitadelClient {
         return(output)
     }
 
-    internal_program(secret) {
+    async internal_program(secret) {
         let cmdstr = `IPGM ${secret}`
         let resp = await this.clientWrite(cmdstr)
         let output =  this.hande_generic_response(resp)
@@ -882,7 +879,7 @@ class CitadelClient {
 
     // download/upload ...
 
-    file_download(filename) {
+    async file_download(filename) {
         if ( !filename ) return(-2)
         let cmdstr = `OPEN ${filename}`
         let resp = await this.clientWrite(cmdstr)
@@ -892,7 +889,7 @@ class CitadelClient {
     }
 
     // 
-    attachment_download(msgnum,part) {
+    async attachment_download(msgnum,part) {
         if ( !msgnum ) return(-2)
         if ( !part ) return(-2)
         let cmdstr = `OPNA ${msgnum}|${part}`
@@ -903,7 +900,7 @@ class CitadelClient {
         return(resp.status)
     }
 
-    image_download(filename) {
+    async image_download(filename) {
         if ( !filename ) return(-2)
         let cmdstr = `OIMG ${msgnum}`
         let resp = await this.clientWrite(cmdstr)
@@ -913,7 +910,7 @@ class CitadelClient {
         return(resp.status)
     }
 
-    file_upload(save_as,comment,path) {
+    async file_upload(save_as,comment,path) {
         if (!save_as) return -1;
         if (!comment) return -1;
         if (!path) return -1;
@@ -932,7 +929,7 @@ class CitadelClient {
     }
     // single message
 
-    image_upload(for_real,save_as,path) {
+    async image_upload(for_real,save_as,path) {
         if (!save_as) return -1;
         if (!comment) return -1;
         if (!path) return -1;
@@ -952,7 +949,7 @@ class CitadelClient {
     // ---- ---- ---- ---- 
     // send text
 
-    send_instant_message(username,text) {
+    async send_instant_message(username,text) {
         if ( !username ) return -2;
         let cmdstr = ''
         if (text) {
@@ -969,7 +966,7 @@ class CitadelClient {
         }
     }
 
-    set_bio(bio) {
+    async set_bio(bio) {
         if ( !bio ) return -2;
         let cmdstr = 'EBIO'
         let resp = await this.clientWrite(cmdstr)
@@ -979,7 +976,7 @@ class CitadelClient {
         return(resp.status)
     }
 
-    list_users_with_bios() {
+    async list_users_with_bios() {
         let cmdstr = 'LBIO'
         let resp = await this.clientWrite(cmdstr)
         if ( resp.bucket === 4 ) {
@@ -988,7 +985,7 @@ class CitadelClient {
         return(resp.status)
     }
 
-    enter_system_message(filename,text) {
+    async enter_system_message(filename,text) {
         if ( !filename ) return -2;
         let cmdstr = `EMSG ${filename}`
         let resp = await this.clientWrite(cmdstr)
@@ -998,7 +995,7 @@ class CitadelClient {
         return(resp.status)
     }
 
-    aide_set_email_addresses(who,emailaddrs) {
+    async aide_set_email_addresses(who,emailaddrs) {
         if ( !who ) return -2;
         if ( !emailaddrs ) return -2;
         let cmdstr = `ASEA ${who}`
@@ -1007,9 +1004,9 @@ class CitadelClient {
             this.send_text(emailaddrs)
         }
         return(resp.status)
-     }
+    }
 
-    set_system_config(listing) {
+    async set_system_config(listing) {
         let cmdstr = `CONF SET`
         let resp = await this.clientWrite(cmdstr)
         if ( resp.bucket === 4 ) {
@@ -1019,7 +1016,7 @@ class CitadelClient {
     }
 
     // 
-    send_text(text) {
+    async send_text(text) {
         this.uploading = true
         this.client.write(`${text}\n000\n`,(err) => {
             this.uploading = false
@@ -1067,7 +1064,7 @@ class CitadelClient {
         })
     }
 
-    end_upload(discard) {
+    async end_upload(discard) {
         let cmdstr = `UCLS ${discard}`
         let resp = await this.clientWrite(cmdstr,false,true)
         return resp.status
@@ -1088,7 +1085,7 @@ class CitadelClient {
     }
 
     // sprintf(cret, "%d|%ld|%s|%s", (int) bytes, last_mod, filename, mimetype);
-    process_download(resp,is_binary) {
+    async process_download(resp,is_binary) {
         this.downloading = true
         this.binary_data = is_binary
         let len = rep.response[0]
@@ -1113,7 +1110,7 @@ class CitadelClient {
     }
 
     //
-    end_download() {
+    async end_download() {
         let cmdstr = `CLOS`
         let resp = await this.clientWrite(cmdstr,false,true)
         this.downloading = false
@@ -1122,7 +1119,8 @@ class CitadelClient {
     
 
     approximate_mime_type(path) {
-
+        let mtype = mime.getType(path)  // getExtension
+        return(mtype)
     }
 
     read_file(path) {
