@@ -64,13 +64,21 @@ function shortLines(text) {
     }
 }
 
+
+var g_single_citadel = null
+
 class CitadelClient {
 
     // ---- ---- ---- ---- ----
     constructor() {
+        if ( g_single_citadel !== null ) {
+            g_single_citadel.restart_agent = null
+            g_single_citadel.client = null
+            g_single_citadel = null
+          }
         this.schedule = []
         this.client = null
-        this.nowait = true
+        this.nowait = false
         this.roomMap = {}
         this.room_types = [ "LKRA", "LKRN", "LKRO", "LZRM", "LRMS", "LPRM" ]
         this.message_proto = [ "ALL", "OLD", "NEW", "LAST", "FIRST", "GT", "LT" ]
@@ -96,6 +104,7 @@ class CitadelClient {
         this.failed_data = null
         this.section_count = -1
         //
+        g_single_citadel = this
     }
 
     //
@@ -120,8 +129,7 @@ class CitadelClient {
         let client = net.createConnection({ port: 504 }, () => {
             console.log('connected to server!');
             this.client = client;
-            if ( resolver ) resolver()
-            else client.end()
+            this.last_writer = { 'resolver' : resolver, 'rejector' : rejector, 'writer' : null }
           });
           
         //
@@ -142,7 +150,7 @@ class CitadelClient {
             let line = data.toString().trim();
             let resp = line.split(' ')
             let status = parseInt(resp.shift())
-            let bucket = status/100
+            let bucket = Math.floor(status/100)
             if ( (bucket !== 5) ) {
                 if ( this.last_writer !== null ) {
                     let data_resolution = this.last_writer
@@ -153,16 +161,15 @@ class CitadelClient {
             } else {
                 if ( this.last_writer !== null ) {
                     let error_resolution = this.last_writer
-                    if ( error_resolution && error_resolution.rejector ) error_resolution.rejector(line)
+                    if ( error_resolution && error_resolution.rejector ) error_resolution.rejector(new Error(line))
                 }
             }
-            if ( bucket === 2 ) {
-                this.next_waiting_write()
-            }
+            this.next_waiting_write()
         });
         //
         client.on('end', () => {
             console.log('disconnected from server');
+            this.client = null;
             if ( this.restart_agent ) {
                 this.restart_agent.emit('restart')
             }
@@ -191,9 +198,11 @@ class CitadelClient {
             this.last_writer = next
         } else {
             this.last_writer = null
+            /*
             if ( this.nowait ) {
                 this.client.end()
             }
+            */
         }
     }
 
@@ -340,16 +349,6 @@ class CitadelClient {
         return(output)
     }
 
-    async create_room(roomname,type,floor) {
-        if ( type != 3 ) {
-            let cmd = `CRE8 1|${roomname}|${type}||${floor}`
-            let resp =  await this.clientWrite(cmd)
-            let output = this.hande_generic_response(resp)
-            return(output)
-        }
-        return("ERR")
-    }
-
     async createPasswordRoom(roomname,floor,password) {
         let cmd = `CRE8 1|${roomname}|3|${password}|${floor}`
         let resp =  await this.clientWrite(cmd)
@@ -404,7 +403,7 @@ class CitadelClient {
         try {
             let cmdstr = "NEWU " + username
             let resp =  await this.clientWrite(cmdstr)
-            resp = await this.set_password(pass)
+            await this.set_password(pass)
             return(resp.response)
         } catch ( e ) {
             console.log("create user: " + e.message)
@@ -548,17 +547,26 @@ class CitadelClient {
         return(output)
     }
 
+
     async create_room(for_real,roomname,type,password,floor) {
         if ( !roomname ) return(-2)
         let cmdstr = ''
-        if ( password ) {
-            cmdstr = `CRE8 ${for_real}|${roomname}|${type}|${password}|${floor}`
-        } else {
-            cmdstr = `CRE8 ${for_real}|${roomname}|${type}||${floor}`
+        if ( floor === undefined ) {
+            floor = 0
         }
-        let resp = await this.clientWrite(cmdstr)
-        let output = this.hande_generic_response(resp)
-        return(output)
+        if ( password ) {
+            cmdstr = `CRE8 ${for_real ? 1 : 0}|${roomname}|${type}|${password}|${floor}`
+        } else {
+            cmdstr = `CRE8 ${for_real ? 1 : 0}|${roomname}|${type}||${floor}`
+        }
+        try {
+            let resp = await this.clientWrite(cmdstr)
+            let output = this.hande_generic_response(resp)
+            return(output)    
+        } catch (e) {
+            console.warn(e.message)
+        }
+        return(false)
     }
 
     async forget_room() {
