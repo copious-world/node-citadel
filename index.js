@@ -76,6 +76,7 @@ class CitadelClient {
             g_single_citadel.client = null
             g_single_citadel = null
           }
+        this.port = 504
         this.schedule = []
         this.client = null
         this.nowait = false
@@ -107,6 +108,10 @@ class CitadelClient {
         g_single_citadel = this
     }
 
+    set_port(port) {
+        this.port = port
+    }
+
     //
     set_restart_agent(agent) {
         if ( agent && (typeof agent === 'object') ) {
@@ -126,7 +131,7 @@ class CitadelClient {
             rejector = () => { reject(false) }
         })
         //
-        let client = net.createConnection({ port: 504 }, () => {
+        let client = net.createConnection({ port: this.port }, () => {
             console.log('connected to server!');
             this.client = client;
             this.last_writer = { 'resolver' : resolver, 'rejector' : rejector, 'writer' : null }
