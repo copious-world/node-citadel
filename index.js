@@ -6,6 +6,11 @@ const mime = require('mime/lite')
 //
 
 
+
+// https://github.com/mingodad/citadel
+// that may be what is left of this
+
+
 class RoomDescriptor {
     constructor(fields) {
         this.QName = fields[0]
@@ -76,7 +81,7 @@ class CitadelClient {
             g_single_citadel.client = null
             g_single_citadel = null
           }
-        this.port = 504
+        this.port = 514
         this.schedule = []
         this.client = null
         this.nowait = false
