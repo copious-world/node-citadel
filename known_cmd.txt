@@ -1,0 +1,229 @@
+GJWT :: auth/serv_auth.c: "Generate a Json Web Token"
+AJWT :: auth/serv_auth.c: "Authenticate with Java Web Token"
+
+AUTO :: autocompletion/serv_autocompletion.c: "Do recipient autocompletion"
+
+EBIO :: bio/serv_bio.c: "Enter your bio"
+RBIO :: bio/serv_bio.c: "Read a user's bio"
+
+blog/serv_blog.c:               register_message_hook(blog_upload_beforesave, EVT_BEFORESAVE
+
+calendar/serv_calendar.c:		register_message_hook(ical_obj_beforesave, EVT_BEFORESAVE
+calendar/serv_calendar.c:		register_message_hook(ical_obj_aftersave, EVT_AFTERSAVE
+calendar/serv_calendar.c:		register_session_hook(ical_create_room, EVT_LOGIN, PRIO_LOGIN + 1
+ICAL :: calendar/serv_calendar.c:   "Citadel iCalendar commands"
+calendar/serv_calendar.c:		register_session_hook(ical_session_startup, EVT_START, PRIO_START + 1
+calendar/serv_calendar.c:		register_session_hook(ical_session_shutdown, EVT_STOP, PRIO_STOP + 80
+calendar/serv_calendar.c:		register_fixed_output_hook("text/calendar", ical_fixed_output
+calendar/serv_calendar.c:		register_fixed_output_hook("application/ics", ical_fixed_output
+
+
+checkpoint/serv_checkpoint.c:		register_session_hook(cdb_checkpoint, EVT_TIMER, PRIO_CLEANUP + 10
+clamav/serv_virus.c:	            register_message_hook(clamd, EVT_SMTPSCAN
+
+STLS :: crypto/serv_crypto.c: "Start TLS session"
+GTLS :: crypto/serv_crypto.c: "Get TLS session status"
+
+crypto/serv_crypto.c:	register_session_hook(endtls, EVT_STOP, PRIO_STOP + 10
+ctdlproto/serv_file.c:  register_session_hook(files_logout_hook, EVT_LOGOUT, PRIO_LOGOUT + 8
+
+
+DELF :: ctdlproto/serv_file.c: "Delete a file"
+MOVF :: ctdlproto/serv_file.c: "Move a file"
+OPEN :: ctdlproto/serv_file.c: "Open a download file transfer"
+CLOS :: ctdlproto/serv_file.c: "Close a download file transfer"
+UOPN :: ctdlproto/serv_file.c: "Open an upload file transfer"
+UCLS :: ctdlproto/serv_file.c: "Close an upload file transfer"
+READ :: ctdlproto/serv_file.c: "File transfer read operation"
+WRIT :: ctdlproto/serv_file.c: "File transfer write operation"
+OIMG :: ctdlproto/serv_file.c: "Open an image file for download"
+UIMG :: ctdlproto/serv_file.c: "Upload an image file"
+MESG :: ctdlproto/serv_file.c: "fetch system banners"
+EMSG :: ctdlproto/serv_file.c: "submit system banners"
+
+
+MSGS :: ctdlproto/serv_messages.c: "Output a list of messages in the current room"
+MSG0 :: ctdlproto/serv_messages.c: "Output a message in plain text format"
+MSG2 :: ctdlproto/serv_messages.c: "Output a message in RFC822 format"
+MSG4 :: ctdlproto/serv_messages.c: "Output a message in the client's preferred format"
+MSGP :: ctdlproto/serv_messages.c: "Select preferred format for MSG4 output"
+OPNA :: ctdlproto/serv_messages.c: "Open an attachment for download"
+DLAT :: ctdlproto/serv_messages.c: "Download an attachment"
+ENT0 :: ctdlproto/serv_messages.c: "Enter a message"
+DELE :: ctdlproto/serv_messages.c: "Delete a message"
+MOVE :: ctdlproto/serv_messages.c: "Move or copy a message to another room"
+
+LRMS :: ctdlproto/serv_rooms.c: "List rooms"
+LKRA :: ctdlproto/serv_rooms.c: "List all known rooms"
+LKRN :: ctdlproto/serv_rooms.c: "List known rooms with new messages"
+LKRO :: ctdlproto/serv_rooms.c: "List known rooms without new messages"
+LZRM :: ctdlproto/serv_rooms.c: "List zapped rooms"
+LPRM :: ctdlproto/serv_rooms.c: "List public rooms"
+GOTO :: ctdlproto/serv_rooms.c: "Goto a named room"
+STAT :: ctdlproto/serv_rooms.c: "Get mtime of the current room"
+WHOK :: ctdlproto/serv_rooms.c: "List users who know this room"
+RDIR :: ctdlproto/serv_rooms.c: "List files in room directory"
+GETR :: ctdlproto/serv_rooms.c: "Get room parameters"
+SETR :: ctdlproto/serv_rooms.c: "Set room parameters"
+GETA :: ctdlproto/serv_rooms.c: "Get the room admin name"
+SETA :: ctdlproto/serv_rooms.c: "Set the room admin for this room"
+RINF :: ctdlproto/serv_rooms.c: "Fetch room info file"
+KILL :: ctdlproto/serv_rooms.c: "Kill (delete) the current room"
+CRE8 :: ctdlproto/serv_rooms.c: "Create a new room"
+EINF :: ctdlproto/serv_rooms.c: "Enter info file for the current room"
+LFLR :: ctdlproto/serv_rooms.c: "List all known floors"
+CFLR :: ctdlproto/serv_rooms.c: "Create a new floor"
+KFLR :: ctdlproto/serv_rooms.c: "Kill a floor"
+EFLR :: ctdlproto/serv_rooms.c: "Edit a floor"
+
+NOOP :: ctdlproto/serv_session.c: "no operation"
+QNOP :: ctdlproto/serv_session.c: "no operation with no response"
+ASYN :: ctdlproto/serv_session.c: "enable asynchronous server responses"
+INFO :: ctdlproto/serv_session.c: "fetch server capabilities and configuration"
+ECHO :: ctdlproto/serv_session.c: "echo text back to the client"
+MORE :: ctdlproto/serv_session.c: "fetch the paginator prompt"
+IDEN :: ctdlproto/serv_session.c: "identify the client software and location"
+TERM :: ctdlproto/serv_session.c: "terminate another running session"
+TIME :: ctdlproto/serv_session.c: "fetch the date and time from the server"
+
+DOWN :: ctdlproto/serv_syscmds.c: "perform a server shutdown"
+HALT :: ctdlproto/serv_syscmds.c: "halt the server without exiting the server process"
+SCDN :: ctdlproto/serv_syscmds.c: "schedule or cancel a server shutdown"4
+
+USER :: ctdlproto/serv_user.c: "Submit username for login"
+PASS :: ctdlproto/serv_user.c: "Complete login by submitting a password"
+QUIT :: ctdlproto/serv_user.c: "log out and disconnect from server"
+LOUT :: ctdlproto/serv_user.c: "log out but do not disconnect from server"
+CREU :: ctdlproto/serv_user.c: "Create User"
+SETP :: ctdlproto/serv_user.c: "Set the password for an account"4
+
+GETU :: ctdlproto/serv_user.c: "Get User parameters"
+SETU :: ctdlproto/serv_user.c: "Set User parameters"
+
+SLRP :: ctdlproto/serv_user.c: "Set Last Read Pointer"
+INVT :: ctdlproto/serv_user.c: "Invite a user to a room"
+KICK :: ctdlproto/serv_user.c: "Kick a user out of a room"
+FORG :: ctdlproto/serv_user.c: "Forget a room"
+GNUR :: ctdlproto/serv_user.c: "Get Next Unregistered User"
+VALI :: ctdlproto/serv_user.c: "Validate new users"
+LIST :: ctdlproto/serv_user.c: "List users"
+CHEK :: ctdlproto/serv_user.c: "assorted info we need to check at login"
+QUSR :: ctdlproto/serv_user.c: "check to see if a user exists"
+AGUP :: ctdlproto/serv_user.c: "Administratively Get User Parameters"
+ASUP :: ctdlproto/serv_user.c: "Administratively Set User Parameters"
+AGEA :: ctdlproto/serv_user.c: "Administratively Get Email Addresses"
+ASEA :: ctdlproto/serv_user.c: "Administratively Set Email Addresses"
+
+MARK :: ctdlproto/serv_user.c: "Mark messages in a sequence set as seen"
+GTSN :: ctdlproto/serv_user.c: "Fetch seen/unread message flags"
+VIEW :: ctdlproto/serv_user.c: "Set preferred view for user/room combination"
+
+RENU :: ctdlproto/serv_user.c: "Rename a user"
+NEWU :: ctdlproto/serv_user.c: "Log in as a new user"
+ISME :: ctdlproto/serv_user.c: "Determine whether an email address belongs to a user"
+BIFF :: ctdlproto/serv_user.c: "Count new messages that have arrived in the inbox"
+
+GPEX :: expire/expire_policy.c: "Get expire policy"
+SPEX :: expire/expire_policy.c: "Set expire policy"
+TDAP :: expire/serv_expire.c: "Manually initiate auto-purger"
+
+expire/serv_expire.c:		register_session_hook(purge_databases, EVT_TIMER, PRIO_CLEANUP + 20
+
+SRCH :: fulltext/serv_fulltext.c: "Full text search"
+fulltext/serv_fulltext.c:		register_delete_hook(ft_delete_remove
+fulltext/serv_fulltext.c:		register_session_hook(do_fulltext_indexing, EVT_HOUSE, PRIO_CLEANUP + 300
+
+DLRI :: image/serv_image.c: "DownLoad Room Image"
+ULRI :: image/serv_image.c: "UpLoad Room Image"
+DLUI :: image/serv_image.c: "DownLoad User Image"
+ULUI :: image/serv_image.c: "UpLoad User Image"
+
+imap/serv_imap.c:		register_service_hook(config_get_int("c_imap_port"), NULL, imap_greeting, imap_command_loop, NULL, CitadelServiceIMAP
+imap/serv_imap.c:		register_service_hook(config_get_int("c_imaps_port"), NULL, imaps_greeting, imap_command_loop, NULL, CitadelServiceIMAPS
+imap/serv_imap.c:		register_session_hook(imap_cleanup_function, EVT_STOP, PRIO_STOP + 30
+
+GIBR :: inboxrules/serv_inboxrules.c: "Get InBox Rules"
+PIBR :: inboxrules/serv_inboxrules.c: "Put InBox Rules"
+inboxrules/serv_inboxrules.c:		register_room_hook(serv_inboxrules_roomhook
+inboxrules/serv_inboxrules.c:		register_session_hook(perform_inbox_processing, EVT_HOUSE, PRIO_HOUSE + 10
+
+inetcfg/serv_inetcfg.c:		register_message_hook(inetcfg_aftersave, EVT_AFTERSAVE
+
+GEXP :: instmsg/serv_instmsg.c: "Get instant messages"
+SEXP :: instmsg/serv_instmsg.c:	"Send an instant message"
+DEXP :: instmsg/serv_instmsg.c: "Disable instant messages"
+REQT :: instmsg/serv_instmsg.c: "Request client termination"
+instmsg/serv_instmsg.c:		register_session_hookgexp_async, EVMOVFT_ASYNC, PRIO_ASYNC + 1
+instmsg/serv_instmsg.c:		register_session_hook(delete_instant_messages, EVT_STOP, PRIO_STOP + 1
+instmsg/serv_instmsg.c:		register_xmsg_hook(send_instant_message, XMSG_PRI_LOCAL
+instmsg/serv_instmsg.c:		register_session_hook(instmsg_timer, EVT_TIMER, PRIO_CLEANUP + 400
+
+listdeliver/serv_listdeliver.c:		register_session_hook(listdeliver_sweep, EVT_TIMER, PRIO_AGGR + 50
+
+LSUB :: listsub/serv_listsub.c:	"List subscribe/unsubscribe"
+
+nntp/serv_nntp.c:		register_service_hook(config_get_int("c_nntp_port"),
+nntp/serv_nntp.c:		register_service_hook(config_get_int("c_nntps_port"),
+nntp/serv_nntp.c:		register_session_hook(nntp_cleanup_function, EVT_STOP, PRIO_STOP + 250
+notes/serv_notes.c:		register_message_hook(serv_notes_beforesave, EVT_BEFORESAVE
+
+pop3client/serv_pop3client.c:		register_session_hook(pop3client_scan, EVT_TIMER, PRIO_AGGR + 50
+
+pop3/serv_pop3.c:		register_service_hook(
+pop3/serv_pop3.c:		register_service_hook(
+pop3/serv_pop3.c:		register_session_hook(pop3_cleanup_function, EVT_STOP, PRIO_STOP + 30
+
+RCHT :: roomchat/serv_roomchat.c: "Participate in real time chat in a room"
+roomchat/serv_roomchat.c:		register_session_hook(roomchat_timer, EVT_TIMER, PRIO_CLEANUP + 400
+
+rssclient/serv_rssclient.c:		register_session_hook(rssclient_scan, EVT_TIMER, PRIO_AGGR + 300
+
+
+RWHO :: rwho/serv_rwho.c:   "Display who is online"
+STEL :: rwho/serv_rwho.c:   "Enter/exit stealth mode"
+
+smtp/serv_smtp.c:		register_service_hook(config_get_int("c_smtp_port"),	// SMTP MTA
+smtp/serv_smtp.c:		register_service_hook(config_get_int("c_smtps_port"),	// SMTPS MTA
+smtp/serv_smtp.c:		register_service_hook(config_get_int("c_msa_port"),		// SMTP MSA
+smtp/serv_smtp.c:		register_service_hook(0,					// local LMTP
+smtp/serv_smtp.c:		register_service_hook(0,					// local LMTP
+smtp/serv_smtp.c:		register_session_hook(smtp_cleanup_function, EVT_STOP, PRIO_STOP + 250
+
+smtp/serv_smtpclient.c:		register_message_hook(smtp_aftersave, EVT_AFTERSAVE
+smtp/serv_smtpclient.c:		register_session_hook(smtp_do_queue_quick, EVT_HOUSE, PRIO_AGGR + 51
+smtp/serv_smtpclient.c:		register_session_hook(smtp_do_queue_full, EVT_TIMER, PRIO_AGGR + 51
+
+spam/serv_spam.c:		register_message_hook(spam_assassin, EVT_SMTPSCAN
+test/serv_test.c:		register_cleanup_hook(CleanupTest
+test/serv_test.c:		register_session_hook(NewRoomTest, EVT_NEWROOM, 1
+test/serv_test.c:		register_session_hook(SessionStartTest, EVT_START, 1
+test/serv_test.c:		register_session_hook(SessionStopTest, EVT_STOP, 1
+test/serv_test.c:		register_session_hook(LoginTest, EVT_LOGIN, 1
+
+vcard/serv_vcard.c:		register_session_hook(vcard_session_login_hook, EVT_LOGIN, PRIO_LOGIN + 70
+vcard/serv_vcard.c:		register_message_hook(vcard_upload_beforesave, EVT_BEFORESAVE
+vcard/serv_vcard.c:		register_message_hook(vcard_upload_aftersave, EVT_AFTERSAVE
+
+REGI :: vcard/serv_vcard.c: "Enter registration info"
+GREG :: vcard/serv_vcard.c: "GREG", "Get registration info"
+QDIR :: vcard/serv_vcard.c: "Query Directory"
+RBDI :: vcard/serv_vcard.c:	"ReBuild Directory Index"
+GVSN :: vcard/serv_vcard.c: "Get Valid Screen Names"
+GVEA :: vcard/serv_vcard.c: "Get Valid Email Addresses"
+DVCA :: vcard/serv_vcard.c: "Dump VCard Addresses"
+
+vcard/serv_vcard.c:		register_user_hook(vcard_newuser, EVT_NEWUSER
+vcard/serv_vcard.c:		register_session_hook(store_harvested_addresses, EVT_TIMER, PRIO_CLEANUP + 470
+vcard/serv_vcard.c:		register_fixed_output_hook("text/x-vcard", vcard_fixed_output
+vcard/serv_vcard.c:		register_fixed_output_hook("text/vcard", vcard_fixed_output
+vcard/serv_vcard.c:		register_service_hook(config_get_int("c_pftcpdict_port"),	// Postfix
+
+wiki/serv_wiki.c:		register_message_hook(wiki_upload_beforesave, EVT_BEFORESAVE
+WIKI :: wiki/serv_wiki.c: "Commands related to Wiki management"
+
+xmpp/serv_xmpp.c:		register_service_hook(config_get_int("c_xmpp_c2s_port"),
+xmpp/serv_xmpp.c:		register_session_hook(xmpp_cleanup_function, EVT_STOP, PRIO_STOP + 70
+xmpp/serv_xmpp.c:       register_session_hook(xmpp_login_hook, EVT_LOGIN, PRIO_LOGIN + 90
+xmpp/serv_xmpp.c:       register_session_hook(xmpp_logout_hook, EVT_LOGOUT, PRIO_LOGOUT + 90
+xmpp/serv_xmpp.c:       register_session_hook(xmpp_login_hook, EVT_UNSTEALTH, PRIO_UNSTEALTH + 1
+xmpp/serv_xmpp.c:       register_session_hook(xmpp_logout_hook, EVT_STEALTH, PRIO_STEALTH + 1

@@ -1,19 +1,20 @@
 {
-  "name": "node-citadel",
-  "version": "0.0.3",
-  "description": "A node.js module that provide a front end to the citadel server similarly to the command line citadel interface.",
-  "main": "index.js",
-  "scripts": {
-    "test": "node tests/test.js"
-  },
-  "keywords": [
-    "citadel",
-    "groupware",
-    "client"
-  ],
-  "author": "Richard A. Leddy",
-  "license": "GPL-3.0-or-later",
-  "dependencies": {
-    "mime": "^2.4.4"
-  }
+    "name": "node-citadel",
+    "version": "0.0.3",
+    "description": "A node.js module that provides a front end to the citadel server similarly to the command line citadel interface.",
+    "main": "index.js",
+    "scripts": {
+        "test": "node tests/index.js",
+        "gen-docs": "jsdoc --configure ./tools/jsdoc.conf -a all -R README.md --verbose"
+    },
+    "keywords": [
+        "citadel",
+        "groupware",
+        "client"
+    ],
+    "author": "Richard A. Leddy",
+    "license": "GPL-3.0-or-later",
+    "dependencies": {
+        "mime": "^2.4.4"
+    }
 }
