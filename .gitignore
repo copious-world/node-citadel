@@ -1,3 +1,4 @@
 package_lock.json
 node_modules/*
 citadel/*
+lmdb/*

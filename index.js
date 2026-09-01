@@ -9,7 +9,9 @@ const mime = require('mime/lite')
 // https://github.com/mingodad/citadel
 // the one that is up to date is on their own git server
 
-
+/**
+ * 
+ */
 class RoomDescriptor {
     constructor(fields) {
         this.QName = fields[0]
@@ -23,6 +25,9 @@ class RoomDescriptor {
     }
 }
 
+/**
+ * 
+ */
 class CitadelUser {
     constructor() {
         this.fullname = fields[0]
@@ -37,6 +42,9 @@ class CitadelUser {
     }
 }
 
+/**
+ * 
+ */
 class ExpirationPolicy {
     constructor(em,ev) {
         this.expire_mode = em
@@ -46,6 +54,11 @@ class ExpirationPolicy {
 
 
 
+/**
+ * 
+ * @param {*} text 
+ * @returns 
+ */
 function shortLines(text) {
     if ( text.length > 1000 ) {
         let lines = text.split('\n')
@@ -71,6 +84,9 @@ function shortLines(text) {
 
 var g_single_citadel = null
 
+/**
+ * 
+ */
 class CitadelClient {
 
     // ---- ---- ---- ---- ----
@@ -132,6 +148,7 @@ class CitadelClient {
     }
 
     // ---- ---- ---- ---- ----
+
     /**
      * 
      * @param {*} restart_agent 
@@ -201,6 +218,7 @@ class CitadelClient {
     }
 
     // ---- ---- ---- ---- ----
+
     /**
      * 
      */
@@ -219,6 +237,7 @@ class CitadelClient {
     }
 
     // ---- ---- ---- ---- ----
+
     /**
      * 
      */
@@ -238,6 +257,7 @@ class CitadelClient {
     }
 
     // ---- ---- ---- ---- ----
+
     /**
      * 
      * @param {*} str 
@@ -282,6 +302,7 @@ class CitadelClient {
             return p
         }
     }
+
 
     /**
      * 
@@ -338,6 +359,23 @@ class CitadelClient {
         let resp =  await this.clientWrite("NOOP")
         return this.handle_generic_response(resp)
     }
+
+
+
+
+    /**
+     * //   "QNOP": "no operation with no response"
+     * 
+     * This is a keep alive operation... The connection can timeout
+     * 
+     * @returns 
+     */
+    async q_noop() {
+        let cmdstr = 'QNOP'
+        let resp = await this.clientWrite(cmdstr)
+        return this.handle_generic_response(resp)
+    }
+
 
     /**
      * 
@@ -890,7 +928,8 @@ class CitadelClient {
         return(output)
     }
 
-    //
+
+    
     /**
      * 
      * @returns 
@@ -904,6 +943,7 @@ class CitadelClient {
         }
         return resp.status
     }
+
 
     /**
      * 
@@ -919,7 +959,6 @@ class CitadelClient {
         let output = this.handle_generic_response(resp)
         return(output)
     }
-
 
 
 
@@ -1656,6 +1695,7 @@ class CitadelClient {
         return(resp.status)
     }
 
+
     /**
      * 
      * @param {*} save_as 
@@ -1680,7 +1720,8 @@ class CitadelClient {
             this.unlockWriter()
         }
     }
-    // single message
+
+
 
     /**
      * 
@@ -2197,18 +2238,6 @@ class CitadelClient {
         let resp = await this.clientWrite(cmdstr)
         return this.handle_generic_response(resp)
     }
-
-    // /**
-    //  * //   "QNOP": "no operation with no respons"s
-    //  * 
-    //  * @returns 
-    //  */
-    // async q_noop() {
-    //     let cmdstr = 'QNOP'
-    //     let resp = await this.clientWrite(cmdstr)
-    //     return this.handle_generic_response(resp)
-    // }
-
 
     /**
      * //   "ASYN": "enable asynchronous server responses"
