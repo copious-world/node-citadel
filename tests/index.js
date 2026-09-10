@@ -1,6 +1,10 @@
 let CitadelClient = require("../index")
 
 
+// "http://localhost/blog-search/224edbeb-c19d-4ce2-9844-96c2fed6426e/any|create_date/1/0"
+//  http://localhost/load_demos/62c8ea27-617a-45ac-b080-9aee85f0554b/any%7Ccreate_date/1/0
+//  http://localhost/load_demos/62c8ea27-617a-45ac-b080-9aee85f0554b/any%7Ccreate_date/3/0   (how many start index)
+
 
 
 async function run() {
@@ -22,8 +26,11 @@ async function run() {
     let str = await cit.get_user_parameters()
     console.log("USER PARS NOT LOGGED",str)
     //
-    await cit.user('richard')
-    await cit.password('test9test')
+    console.log(await cit.user('bugsy'))
+    console.log(await cit.password('gobldygook'))
+    //
+    console.log(await cit.user('richard'))
+    console.dir(await cit.password('test9test'))
 
 
 
@@ -127,6 +134,50 @@ async function run() {
     //
     //
     await cit.logout()
+    let user_again = await cit.authenticate_JWT(jwt)
+    console.dir(user_again)
+
+    console.log("Once again")
+
+    let developerid = 24,
+        clientid = 3,
+        revision = 2,
+        software_name = "node citadle",
+        hostname = "copious.world"
+
+    await cit.identify_software(developerid,clientid,revision,software_name,hostname)
+
+    let users = await cit.on_line_users()
+    console.log(users)
+
+
+    let global_dir = await cit.directory_lookup("richard@richardLa-HP-ptop-17-cn1xxx")
+    console.log(global_dir)
+    //
+    console.log(await cit.rebuild_dir_index())
+    //
+    let auto_results = await cit.autocomplete("HP-ptop-17-")
+    console.log(auto_results)
+
+    console.log(await cit.check_email_is_mine("richard@richardLa-HP-ptop-17-cn1xxx"))
+
+
+    let server_info = await cit.server_info()
+    console.log(server_info)
+
+
+    // START TLS ??? have to do TLS negotiation -- need to work this out with the server code
+    console.log(await cit.get_TLS_session())
+
+
+    console.log(await cit.ical_cmd("test"))
+
+    console.dir(await cit.get_root_mtime())
+
+    // ----
+
+    await cit.logout()
+
     cit.quit()
     
 }
