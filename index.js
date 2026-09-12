@@ -176,6 +176,7 @@ let opcounts = {
   "MSGP" : 47,
   "OPNA" : 48,
   "DLAT" : 49,
+  //
   "WIKI" : 50,
   "LFLR" : 51,
   "CFLR" : 52,
@@ -302,7 +303,7 @@ class CitadelRoom {
         let r_descr = this
         let n = this.room_returned_features.length
         for ( let i = 0; i < n; i++ ) {
-            r_descr[this.room_returned_features[i]] = room_parts[i]
+            r_descr[this.room_returned_features[i]] = fields[i]
         }
         //
     }
@@ -660,7 +661,7 @@ class CitadelClient {
         this.nowait = false
         this.roomMap = {}
         this.room_types = [ "LKRA", "LKRN", "LKRO", "LZRM", "LRMS", "LPRM" ]
-        this.message_proto = [ "ALL", "OLD", "NEW", "LAST", "FIRST", "GT", "LT" ]
+        this.message_proto = [ "ALL", "OLD", "NEW", "LAST", "FIRST", "GT", "LT", "SEARCH" ]
         this.policy_scope = [ "room", "floor", "site", "mailboxes" ];
         //
         this.restart_agent = null;
@@ -1712,31 +1713,51 @@ class CitadelClient {
      * // MSGS
      * 
      * (not yet tested)
-     * @param {*} which 
-     * @param {*} whicharg 
-     * @param {*} mtemplate 
-     * @returns 
+     * @param {string} which 
+     * @param {any} whicharg - depedning on the first parameter, this may be a number or a string
+     * @param {boolean} mtemplate -- optional -- if true, requires interaction
+     * @returns {Array|-2} 
      */
-    async get_messages(which,whicharg,mtemplate) {
+    async get_messages(which,whicharg,mtemplate = false) {
         //
-        if ( typeof which !== 'number' ) return -2;
-        if ( which < 0 || which > 6 ) return -2;
-        let protos = this.message_proto[which]
+        if ( (!which) || this.message_proto.indexOf(which) < 0 ) which = "ALL"
         //
+        //  "ALL", "OLD", "NEW", "LAST", "FIRST", "GT", "LT", "SEARCH"
         let output = null
         let cmdstr = ''
-        if ( which <= 2 ) {
-            cmdstr = `MSGS ${protos}||${(mtemplate) ? 1 : 0}`
-        } else {
-            cmdstr = `MSGS ${protos}|${whicharg}|${(mtemplate) ? 1 : 0}`
+        switch ( which ) {
+            case "ALL":
+            case "OLD": 
+            case "NEW": {
+                let special_headers = (mtemplate) ? 1 : 0
+                cmdstr = `MSGS ${which}||${special_headers}`
+                break;
+            }
+            case "GT":
+            case "LT": {
+                if ( whicharg === undefined ) whicharg = 0
+                if ( typeof whicharg === "string" ) {
+                    whicharg = parseInt(whicharg)
+                    if ( whicharg === NaN ) return -2
+                }
+                let special_headers = (mtemplate) ? 1 : 0
+                cmdstr = `MSGS ${which}|${whicharg}|${special_headers}`
+                break;
+            }
+            case "SEARCH" : {
+                let search_str = (whicharg) ? whicharg : ''
+                if ( Array.isArray(search_str) ) search_str = search_str.join('|')
+                cmdstr = `MSGS SEARCH|0|${search_str}`
+                break;
+            }
         }
+        //
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket !== 1 ) {
-            return(resp.status)
-        } else {
-            output = this.handle_generic_response(resp)
-        }
-        return(output)
+        output = this.handle_generic_response(resp)
+        let messages = output.split('\n')
+        messages.shift()
+        messages.pop()
+        return(messages)
     }
 
 
@@ -1959,6 +1980,8 @@ class CitadelClient {
     }
 
 
+    // "ENT0" : 40,
+
     //
     // ENTER A MESSAGE INTO THE SYSTEM
     //
@@ -2016,22 +2039,129 @@ class CitadelClient {
     }
 
 
+    // "GVSN" : 41,
+    // "GVEA" : 42,
+    // "DVCA" : 43,
 
-    // GVSN
-    // GVEA
-    // DVCA
+
+    /**
+     * //   "GVSN": "Get Valid Screen Names
+     * 
+     * 
+     * @returns {Array}
+     */
+    async get_valid_screen_names() {
+        let cmdstr = 'GVSN'
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        let names = output.split('\n')
+        names.shift()
+        return(names)
+    }
+
+
+    /**
+     * //   "GVEA": "Get Valid Email Addresses"
+     * 
+     * @returns {Array}
+     */
+    async get_valid_email_addresses() {
+        let cmdstr = 'GVEA'
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        let addresses = output.split('\n')
+        addresses.shift()
+        return(addresses)
+    }
+
+
+    /**
+     * //   "DVCA": "Dump VCard Addresses"
+     * 
+     * @returns {Array}
+     */
+    async get_valid_email_addresses() {
+        let cmdstr = 'DVCA'
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        let vcard_addrs = output.split('\n')
+        vcard_addrs.shift()
+        return(vcard_addrs)
+    }
+
+
 
 
     // read single message
-    // MSG0
-    // MSG2
-    // MSG4
+    // "MSG0" : 44,
+    // "MSG2" : 45,
+    // "MSG4" : 46,
+
+
+
+    /**
+     * // MSG0 :: ctdlproto/serv_messages.c: "Output a message in plain text format"
+     * @returns 
+     */
+    async get_message_plain_text(msgnum,headers_only) {
+        if ( headers_only === undefined ) headers_only = 0
+        let cmdstr = "MSG0 ${msgnum}|${headers_only}"
+        let resp =  await this.safe_client_write(cmdstr)
+        return this.handle_generic_response(resp)
+    }
+
+
+    /**
+     * 
+     * // MSG2 :: ctdlproto/serv_messages.c: "Output a message in RFC822 format"
+     * 
+     * @returns 
+     */
+    async get_message_RFC822(msgnum,headers_only) {
+        if ( headers_only === undefined ) headers_only = 0
+        let cmdstr = "MSG2 ${msgnum}" //|${headers_only}"
+        let resp =  await this.safe_client_write(cmdstr)
+console.dir(resp)
+        return this.handle_generic_response(resp)
+    }
+
+
+    /**
+     * 
+     * // MSG4 :: ctdlproto/serv_messages.c: "Output a message in the client's preferred format"
+     * 
+     *
+     * @returns 
+     */
+    async get_message_MIME_content_types(msgnum,section_token) {
+        if ( section_token === undefined ) section_token = 0
+        let cmdstr = "MSG4 ${msgnum}|${section_token}"
+        let resp =  await this.safe_client_write(cmdstr)
+        return this.handle_generic_response(resp)
+    }
+
+
+
 
     // mime related
-    // MSGP             -- text/html|text/plain -- dont_decode
+    // "MSGP" : 47, -- text/html|text/plain -- dont_decode
 
-    // OPNA
-    // DLAT
+    /**
+     * 
+     * // MSGP 
+     *      :: ctdlproto/serv_messages.c: "Select preferred format for MSG4 output"
+     * 
+     * @param {string} format_prefs -- a list of preferred formats or "dont_decode"
+     * @returns 
+     */
+    async get_message_preferred_format(format_prefs ="dont_decode") {
+        let cmdstr = "MSGP ${format_prefs}"
+        let resp =  await this.safe_client_write(cmdstr)
+        return this.handle_generic_response(resp)
+    }
+
+    // "OPNA" : 48,
+    // "DLAT" : 49,
 
 
     // WIKI -- complex command structure
@@ -2356,61 +2486,6 @@ class CitadelClient {
 
 
     /**
-     * // MSG0 :: ctdlproto/serv_messages.c: "Output a message in plain text format"
-     * @returns 
-     */
-    async get_message_plain_text(msgnum,headers_only) {
-        if ( headers_only === undefined ) headers_only = 0
-        let cmdstr = "MSG0 ${msgnum} ${headers_only}"
-        let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
-    /**
-     * 
-     * // MSG2 :: ctdlproto/serv_messages.c: "Output a message in RFC822 format"
-     * 
-     * @returns 
-     */
-    async get_message_RFC822(msgnum,headers_only) {
-        if ( headers_only === undefined ) headers_only = 0
-        let cmdstr = "MSG2 ${msgnum} ${headers_only}"
-        let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
-    /**
-     * 
-     * // MSG4 :: ctdlproto/serv_messages.c: "Output a message in the client's preferred format"
-     * 
-     *
-     * @returns 
-     */
-    async get_message_MIME_content_types(msgnum,section_token) {
-        if ( headers_only === undefined ) headers_only = 0
-        let cmdstr = "MSG4 ${msgnum} ${section_token}"
-        let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
-    /**
-     * 
-     * // MSGP :: ctdlproto/serv_messages.c: "Select preferred format for MSG4 output"
-     * 
-     * @param {string} format_prefs -- a list of preferred formats or "dont_decode"
-     * @returns 
-     */
-    async get_message_preferred_format(format_prefs ="dont_decode") {
-        let cmdstr = "MSGP ${format_prefs}"
-        let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
-    /**
      * 
      * // OPNA :: ctdlproto/serv_messages.c: "Open an attachment for download"
      * 
@@ -2669,44 +2744,9 @@ class CitadelClient {
     }
 
 
-    /**
-     * //   "GVSN": "Get Valid Screen Names
-     * @returns 
-     */
-    async get_valid_screen_names() {
-        let cmdstr = 'GVSN'
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
 
 
 
-    /**
-     * //   "GVEA": "Get Valid Email Addresses"
-     * @returns 
-     */
-    async get_valid_email_addresses() {
-        let cmdstr = 'GVEA'
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-
-
-
-    /**
-     * //   "DVCA": "Dump VCard Addresses"
-     * @returns 
-     */
-    async get_valid_email_addresses() {
-        let cmdstr = 'DVCA'
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
 
 
 

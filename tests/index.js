@@ -124,10 +124,31 @@ async function run() {
     }
 
     msgObject.text = msgObject.text + " " + msgObject.text
-    let postm_result = await cit.post_message(msgObject)
-    console.log("post message result:",postm_result)
-   
+    // let postm_result = await cit.post_message(msgObject)
+    // console.log("post message result:",postm_result)
 
+
+    // GOTO ROOM MAIL
+
+    room_goto = await cit.goto_room('_MAIL_')
+    console.log("RESULT going to room _MAIL_:")
+    console.dir(room_goto,{ depth: 4 })
+    //
+    m_count = await cit.count_new_messages()
+    console.log("message count:",m_count)
+    // list messages
+
+    let msg_list = await cit.get_messages()
+    console.log("MESSAGE LIST")
+    console.log(msg_list)
+
+    let msg_num = msg_list[msg_list.length - 1]
+
+    console.log("looking for message",msg_num)
+    let message_data = await cit.get_message_RFC822(msg_num)
+    console.log(message_data)
+
+    console.log("----------------------------------------------------------------")
 
     let lflr = await cit.floor_listing()
     console.log("floor listing",lflr)
