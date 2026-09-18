@@ -124,8 +124,8 @@ async function run() {
     }
 
     msgObject.text = msgObject.text + " " + msgObject.text
-    // let postm_result = await cit.post_message(msgObject)
-    // console.log("post message result:",postm_result)
+    let postm_result = await cit.post_message(msgObject)
+    console.log("post message result:",postm_result)
 
 
     // GOTO ROOM MAIL
@@ -138,14 +138,23 @@ async function run() {
     console.log("message count:",m_count)
     // list messages
 
-    let msg_list = await cit.get_messages()
+    let msg_list = await cit.get_messages("NEW")
     console.log("MESSAGE LIST")
     console.log(msg_list)
 
-    let msg_num = msg_list[msg_list.length - 1]
+    let msg_num = msg_list[msg_list.length-1]
 
     console.log("looking for message",msg_num)
+    console.log("plain text")
+    let message_data_pt = await cit.get_message_plain_text(msg_num)
+    console.log(message_data_pt)
+
+    console.log("RFC822 text")
     let message_data = await cit.get_message_RFC822(msg_num)
+    console.log(message_data)
+
+    console.log("MIME text")
+    message_data = await cit.get_message_MIME_content_types(msg_num)
     console.log(message_data)
 
     console.log("----------------------------------------------------------------")

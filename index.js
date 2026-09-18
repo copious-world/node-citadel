@@ -546,6 +546,7 @@ class ChatModeCitadelMessage extends CitadelMessage {
 class CitadelMessageFromObject extends CitadelMessage {
     constructor(obj) {
         super(obj.recipient,obj.type,obj.subject,obj.author,obj.references)    
+        this.set_text(obj.text)
     }
 }
 
@@ -2025,11 +2026,11 @@ class CitadelClient {
         //
         let resp =  await this.safe_client_write(msg)
         let output = this.handle_generic_response(resp)
-
         if ( output === "send message") {
             let text = msgObject.text;
             text = text.trim()
             text = shortLines(text)
+console.log("post message sending text:",text)
             //console.log(text)
             text += '\n000'
             output = await this.safe_client_write(text,true)  // clientWrite nowait
@@ -2105,9 +2106,14 @@ class CitadelClient {
      */
     async get_message_plain_text(msgnum,headers_only) {
         if ( headers_only === undefined ) headers_only = 0
-        let cmdstr = "MSG0 ${msgnum}|${headers_only}"
+        let cmdstr = `MSG0 ${msgnum}|${headers_only}` // 
         let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
+        let msg_txt = this.handle_generic_response(resp)
+        if ( msg_txt ) {
+            let msg_lines = msg_txt.split('\n')
+            return msg_lines
+        }
+        return false
     }
 
 
@@ -2119,10 +2125,11 @@ class CitadelClient {
      */
     async get_message_RFC822(msgnum,headers_only) {
         if ( headers_only === undefined ) headers_only = 0
-        let cmdstr = "MSG2 ${msgnum}" //|${headers_only}"
+        let cmdstr = `MSG2 ${msgnum}|${headers_only}` // 
         let resp =  await this.safe_client_write(cmdstr)
-console.dir(resp)
-        return this.handle_generic_response(resp)
+        let msg_txt = this.handle_generic_response(resp)
+        let msg_lines = msg_txt.split('\n')
+        return msg_lines
     }
 
 
@@ -2135,9 +2142,11 @@ console.dir(resp)
      */
     async get_message_MIME_content_types(msgnum,section_token) {
         if ( section_token === undefined ) section_token = 0
-        let cmdstr = "MSG4 ${msgnum}|${section_token}"
+        let cmdstr = `MSG4 ${msgnum}|${section_token}` // 
         let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
+        let msg_txt = this.handle_generic_response(resp)
+        let msg_lines = msg_txt.split('\n')
+        return msg_lines
     }
 
 
@@ -2155,7 +2164,7 @@ console.dir(resp)
      * @returns 
      */
     async get_message_preferred_format(format_prefs ="dont_decode") {
-        let cmdstr = "MSGP ${format_prefs}"
+        let cmdstr = `MSGP ${format_prefs}`
         let resp =  await this.safe_client_write(cmdstr)
         return this.handle_generic_response(resp)
     }
