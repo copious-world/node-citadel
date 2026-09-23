@@ -1,0 +1,336 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+		<title>The Copious Blog - Citadel Server</title>
+		<meta http-equiv="X-UA-Compatible" content="IE=8">
+		<meta name="keywords" content="groupware messaging collaboration">
+
+		<link href="a_data/webcit.css" rel="stylesheet" type="text/css">
+		<link href="a_data/datepicker.css" rel="stylesheet" type="text/css">
+		<link href="a_data/fineuploader.css" rel="stylesheet" type="text/css">
+
+		<link rel="icon" type="image/svg+xml" href="a_data/copiousLogo.svg">
+		<link rel="canonical" href="http://www.copious.world/">
+
+		<link rel="alternate" title="RSS" href="http://localhost:8080/feed_rss?go=" type="application/rss+xml">
+
+		<link href="a_data/do_template.css" rel="stylesheet" type="text/css">
+		<link href="a_data/iconbaricns.css" rel="stylesheet" type="text/css" id="style_iconbar_icns" title="Default iconbar">
+		<link href="a_data/iconbarpiconly.css" rel="alternate stylesheet" type="text/css" id="style_iconbar_piconly" title="Iconbar without text">
+		
+		<!--[if lte IE 8]>
+			<style type="text/css">@import url(static/styles/ie_lte8.css);</style>
+		<![endif]-->
+
+		<script type="text/javascript" src="a_data/prototype.js"></script> 
+		<script type="text/javascript" src="a_data/scriptaculous.js"></script><script type="text/javascript" src="a_data/builder.js"></script><script type="text/javascript" src="a_data/effects.js"></script><script type="text/javascript" src="a_data/dragdrop.js"></script><script type="text/javascript" src="a_data/controls.js"></script><script type="text/javascript" src="a_data/slider.js"></script><script type="text/javascript" src="a_data/sound.js"></script> 
+		<script type="text/javascript" src="a_data/datepicker-dev.js"></script>
+		<script type="text/javascript" src="a_data/wcpref.js"></script>
+		<script type="text/javascript" src="a_data/table.js"></script>
+		<script type="text/javascript" src="a_data/wclib.js"></script>
+		<script type="text/javascript" src="a_data/authmethods.js"></script>
+		<script type="text/javascript" src="a_data/roomops.js"></script>
+		<script type="text/javascript" src="a_data/ctdldragdrop.js"></script>
+		<script type="text/javascript" src="a_data/modal.js"></script>
+		<script type="text/javascript" src="a_data/fineuploader.js"></script>
+
+	</head>
+<body>
+<div id="is_logged_in" style="display:none">no</div>
+<!-- begin modal box -->
+<div id="modal">
+	<div class="md-overlay-decorator">
+	</div>
+	<div class="md-overlay-wrap">
+		<div class="md-overlay">
+			<div class="md-dialog-decorator">
+			</div>
+			<div class="md-dialog-wrap">
+				<div class="md-dialog" id="dialog">
+					<div class="md-content" id="md-content">
+					  <div id="loginbox_topline_container">
+<div id="loginbox_title">
+You must be logged in to access this page.
+</div>
+<div id="loginbox_closebutton">
+<a href="javascript:{authtoggle('authbox_userpass');toggleModal(0);}">
+Close window&nbsp;<img src="a_data/closewindow.gif" border="0" alt="Close window"></a>
+</div>
+</div>
+<br><br>
+<div class="login_message" id="login_errmsg"></div>
+<div id="auth_container">
+
+<div class="authbar" id="authbox_userpass" style="display: block">
+<h2>Citadel Server</h2>
+<form id="ajax_username_password_form" method="POST" action="ajax_login_username_password">
+<label for="uname">User name:</label>
+<input type="text" name="name" id="uname" onkeypress="username_and_password_onkeypress(event);">
+<br><br>
+<label for="pname">Password:</label>
+<input type="password" name="pass" id="pname" onkeypress="username_and_password_onkeypress(event);">
+<br><br>
+<label for="language">Language:</label>
+<select name="language" id="lname" size="1" onchange="switch_to_lang($('lname').value);">
+<option selected="selected" value="en_US">en_US</option>
+<option value="en_US">en_US</option>
+<option value="en_GB">en_GB</option>
+</select>
+
+<br><br>
+</form>
+<div class="logbuttons"><a href="javascript:ajax_try_username_and_password();">Log in</a></div>
+<div class="registernow"><a href="javascript:authtoggle('authbox_newuser');">New user?  Register now</a></div>
+</div>
+
+<div class="authbar" id="authbox_newuser" style="display: none">
+<h2>New user?  Register now</h2>
+enter the name and password you wish to use, and click "New User." <br><br>
+<form id="ajax_newuser_form" method="POST" action="ajax_login_newuser">
+<label for="uname">User name:</label>
+<input type="text" name="name" id="uname" onkeypress="newuser_onkeypress(event);">
+<br><br>
+<label for="pname">Password:</label>
+<input type="password" name="pass" id="pname" onkeypress="newuser_onkeypress(event);">
+<br><br>
+</form>
+<div class="logbuttons"><a href="javascript:ajax_try_newuser();">New User</a></div>
+</div>
+
+<div class="authbar" id="authbox_success" style="display: none">
+	<br><br><br>
+	<div align="center"><h1>
+		<img src="a_data/throbber.gif" alt="">
+		&nbsp;
+		Please wait...
+	</h1></div>
+</div>
+
+</div>
+
+						<!-- contents of modal box go here -->
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<!-- end modal box -->
+<div id="iconbar_pop_left">
+	<div class="iconbar_container_ctrl">
+	
+	
+		<div id="ib_login" class="ib_button_top">
+			<a class="ib_button_link" href="javascript:GetLoggedInFirst('do_welcome')" title="Log in"><span>Log in</span></a>
+		</div>
+	
+		<div id="citlogo" class="logo_citadel">
+    			<img src="a_data/copiousLogo.svg" alt="Powered by Citadel" width="35" height="35">
+  		</div>
+	</div>
+
+	<div id="squashMenu" class="iconbar_container_ctrl" onclick="menuHandler(this)">
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+			<path class="heroicon-ui" d="M4 5h16a1 1 0 0 1 0 2H4a1 1 0 1 1 0-2zm0 6h16a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2zm0 6h16a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2z"></path>
+		</svg>
+	</div>
+</div>
+<div id="iconbar" style="display: none;">
+	<div id="iconbar_container">
+		<div class="iconbar_text">
+			Language:<select name="language" id="lname" size="1" onchange="switch_to_lang($('lname').value);">
+<option selected="selected" value="en_US">en_US</option>
+<option value="en_US">en_US</option>
+<option value="en_GB">en_GB</option>
+</select>
+
+		</div>
+  		<div id="iconbar_menu" class="spread-icons-columns">
+			<div id="button-group-1">
+				<ul id="button">
+					<li id="ib_summary" class="ib_button">
+							<a class="ib_button_link" href="http://localhost:8080/summary" title="Your summary page">
+							<span>Summary</span>
+						</a>
+					</li>
+				
+					<li id="ib_main" class="ib_button">
+							<a class="ib_button_link" href="http://localhost:8080/" title="intro">
+							<span>main page</span>
+						</a>
+					</li>
+				
+				
+				</ul>
+			</div>
+		
+		</div>
+	
+		<div class="ctdlTemplate">
+			<span id="rmlist_template">switch to room list</span>
+			<span id="mnlist_template">switch to menu</span>
+			<span id="mbox_template">My folders</span>
+		</div>
+	</div>
+</div>
+
+<script>
+	function menuHandler(caller) {
+		let menu_dipslay = document.getElementById("iconbar")
+		if ( menu_dipslay ) {
+			let disp_state = menu_dipslay.style.display
+			if ( disp_state === "none" ) {
+				menu_dipslay.style.display = "block"
+			} else {
+				menu_dipslay.style.display = "none"
+			}
+		}
+	}
+</script>
+
+<div id="global">
+<!--("end head.html")-->
+<div id="banner">
+<script type="text/javascript">	
+	room_is_trash = 0;		
+</script>
+<!-- start roombanner.html -->
+<div class="banner use_screen_width" id="room_banner">
+  <div id="nummsgs_template" class="hidden">UNREADMSGS new of TOTALMSGS messages</div>
+	<table border="0"><tbody><tr>
+		<td style="width:16%">&nbsp;</td>
+		<td>
+	
+	
+	
+	
+	
+	
+	
+                <img class="roompic" alt="" src="a_data/room.png">
+        
+	
+	
+
+</td>
+
+		<td>
+			<h1 id="rmname"><a href="http://localhost:8080/readnew?go=The%20Copious%20Blog">The Copious Blog</a></h1>
+			<a type="application/rss+xml" href="http://localhost:8080/feed_rss?go=The%20Copious%20Blog"><img src="a_data/rss.png" alt="RSS"></a>
+			
+			<p id="nummsgs">0 new of 0 messages</p>
+			
+			
+		</td>
+		<td><div class="infos" onmouseover="javascript:Effect.Appear('room_infos', { duration: 2 });" onmouseout="javascript:Effect.Fade('room_infos', { duration: 2 });">
+	The daily from Copious Systems
+</div>
+<div id="room_infos" style="display:none;">
+	The daily from Copious Systems
+</div>
+</td>
+		<td id="actiondiv">
+			<ul class="room_actions">
+				<li class="start_page"></li>
+				<li class="logstatus"><div id="loggedinas">
+	
+	
+		Not logged in.
+	
+</div>
+</li>
+				
+				<li class="view"></li>
+				
+			</ul>
+		</td>
+	</tr></tbody></table>
+</div>
+<!-- end roombanner.html -->
+<navbar id="navbar">
+	<ul>
+	<li class="ungoto">
+		<a href="http://localhost:8080/ungoto">
+			<img src="a_data/ungoto.png" alt="" width="16" height="16">
+			<span class="navbar_link">Ungoto</span>
+		</a>
+	</li>
+
+
+	<li class="newmess">
+		<a href="http://localhost:8080/readnew">
+			<img src="a_data/refresh.png" alt="" width="16" height="16">
+			<span class="navbar_link">Read new messages</span>
+		</a>
+	</li>
+	<li class="readallmess">
+		<a href="http://localhost:8080/readfwd">
+			<img src="a_data/readallmsg.png" alt="" width="16" height="16">
+			<span class="navbar_link">Read all messages</span>
+		</a>
+	</li>
+	<li class="newmess">
+		<a href="javascript:GetLoggedInFirst('display_enter')">
+			<img src="a_data/pencil.png" alt="" width="16" height="16">
+			<span class="navbar_link">Enter a message</span>
+		</a>
+	</li>
+
+
+
+
+
+
+
+	 
+
+
+
+	 
+
+
+
+
+
+	
+	<li class="skipthisroom">
+		<a href="http://localhost:8080/skip" title="Leave all messages marked as unread, go to next room with unread messages">
+			<img src="a_data/skiproom.png" alt="" width="16" height="16">
+			<span class="navbar_link">Skip this room</span>
+		</a>
+	</li>
+	<li class="markngo">
+		<a href="http://localhost:8080/gotonext" title="Mark all messages as read, go to next room with unread messages">
+			<img src="a_data/nextroom.png" alt="" width="16" height="16">
+			<span class="navbar_link">Goto next room</span></a>
+	</li>
+
+
+</ul>
+</navbar>
+</div>
+<div id="content">
+<div class="moreprompt">Go to page: </div>
+<div class="moreprompt"><a name="end_of_msgs">Go to page: </a></div>
+</div> <!-- end of 'content' div -->
+<!-- start trailing.html -->
+</div> <!-- end of 'global' div -->
+<div id="important_message" style="visibility: hidden;">
+<span class="imsg">
+
+</span><br>
+</div>
+
+
+<noscript><div id="noscript_warning">
+	WARNING: You have JavaScript disabled in your web browser.  Many functions of this system will not work properly.
+	</div></noscript>
+	<script type="text/javascript">
+		
+		if ( $("room_banner_override") && $("room_banner") ) {
+			$("room_banner").innerHTML = $("room_banner_override").innerHTML;
+		}
+	</script>
+
+
+</body></html>
