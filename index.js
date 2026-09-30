@@ -5,125 +5,6 @@ const fs = require('fs')
 const mime = require('mime/lite')
 //
 
-let all_citadel_commands = [
-    "NOOP",
-    "QNOP",
-    "ECHO",
-    "TIME",
-    "MESG",
-    "USER",
-    "PASS",
-    "LOUT",
-    "GJWT",
-    "AJWT",
-    "IDEN",
-    "QUIT",
-    "BIFF",
-    "RWHO",
-    "QDIR",
-    "RBDI",
-    "AUTO",
-    "ISME",
-    "INFO",
-    "TERM",
-    "REQT",
-    "STLS",
-    "GTLS",
-    "ICAL",
-    "SEXP",
-    "GEXP",
-    "DEXP",
-    "GOTO",
-    "STAT",
-    "MSGS",
-    "MARK",
-    "SLRP",
-    "GTSN",
-    "VIEW",
-    "SRCH",
-    "EUID",
-    "DELE",
-    "MOVE",
-    "EMSG",
-    //
-    "ENT0",
-    "GVSN",
-    "GVEA",
-    "DVCA",
-    "MSG0",
-    "MSG2",
-    "MSG4",
-    "MSGP",
-    "OPNA",
-    "DLAT",
-    "WIKI",
-    "LFLR",
-    "CFLR",
-    "KFLR",
-    "EFLR",
-    "LKRN",
-    "LKRO",
-    "LZRM",
-    "LKRA",
-    "LRMS",
-    "LPRM",
-    "RDIR",
-    "GETR",
-    "SETR",
-    "RINF",
-    "GETA",
-    "SETA",
-    "KILL",
-    "CRE8",
-    "FORG",
-    "EINF",
-    "INVT",
-    "WHOK",
-    "KICK",
-    "DELF",
-    "MOVF",
-    "OPEN",
-    "CLOS",
-    "READ",
-    "UOPN",
-    "UCLS",
-    "WRIT",
-    "UIMG",
-    "OIMG",
-    "DLRI",
-    "ULRI",
-    "CONF",
-    "GPEX",
-    "SPEX",
-    "TDAP",
-    "SMTP",
-    "DOWN",
-    "SCDN",
-    "HALT",
-    "NEWU",
-    "CREU",
-    "VALI",
-    "QUSR",
-    "LIST",
-    "SETP",
-    "GETU",
-    "EBIO",
-    "RBIO",
-    "DLUI",
-    "ULUI",
-    "AGUP",
-    "ASUP",
-    "AGEA",
-    "ASEA",
-    "RENU",
-    "GNUR",
-    "GREG",
-    "REGI",
-    "CHEK",
-    "STEL",
-    "RCHT"
-]
-
 
 let opcounts = {
   "NOOP" : 1,
@@ -221,6 +102,7 @@ let opcounts = {
   "DOWN" : 91,
   "SCDN" : 92,
   "HALT" : 93,
+  //
   "NEWU" : 94,
   "CREU" : 95,
   "VALI" : 96,
@@ -228,21 +110,22 @@ let opcounts = {
   "LIST" : 98,
   "SETP" : 99,
   "GETU" : 100,
-  "EBIO" : 101,
-  "RBIO" : 102,
-  "DLUI" : 103,
-  "ULUI" : 104,
-  "AGUP" : 105,
-  "ASUP" : 106,
-  "AGEA" : 107,
-  "ASEA" : 108,
-  "RENU" : 109,
-  "GNUR" : 110,
-  "GREG" : 111,
-  "REGI" : 112,
-  "CHEK" : 113,
-  "STEL" : 114,
-  "RCHT" : 115
+  "SETU" : 101,
+  "EBIO" : 102,
+  "RBIO" : 103,
+  "DLUI" : 104,
+  "ULUI" : 105,
+  "AGUP" : 106,
+  "ASUP" : 107,
+  "AGEA" : 108,
+  "ASEA" : 109,
+  "RENU" : 110,
+  "GNUR" : 111,
+  "GREG" : 112,
+  "REGI" : 113,
+  "CHEK" : 114,
+  "STEL" : 115,
+  "RCHT" : 116
 }
 
 
@@ -262,6 +145,21 @@ class RoomDescriptor {
         this.QRorder = parseInt(fields[5])
         this.QRdefaultview = parseInt(fields[6])
         this.QRflags2 = parseInt(fields[7])
+    }
+}
+
+
+
+class RoomListElement {
+    constructor(fields) {
+        this.Name = fields[0]
+        this.flag = fields[1]
+        this.floor = parseInt(fields[2])
+        this.list_order = parseInt(fields[3])
+        this.acl = parseInt(fields[4])
+        this.currrent_view = parseInt(fields[5])
+        this.default_view = parseInt(fields[6])
+        this.lastchange = parseInt(fields[7])
     }
 }
 
@@ -557,7 +455,7 @@ class CitadelMessageFromObject extends CitadelMessage {
  */
 class CitadelServerInfo {
     constructor(fields) {
-        this.siession_id = fields[0]      // Your unique session ID on the server
+        this.session_id = fields[0]      // Your unique session ID on the server
         this.cit_server_name = fields[1]      // The node name of the Citadel server
         this.print_cit_server_name = fields[2]      // Human-readable node name of the Citadel server
         this.fq_domain_name = fields[3]      // The fully-qualified domain name (FQDN) of the server
@@ -642,89 +540,51 @@ function shortLines(text) {
 }
 
 
-var g_single_citadel = null
+class ClientOPs {
 
-/**
- * 
- */
-class CitadelClient {
-
-    // ---- ---- ---- ---- ----
     constructor() {
-        if ( g_single_citadel !== null ) {
-            g_single_citadel.restart_agent = null
-            g_single_citadel.client = null
-            g_single_citadel = null
-          }
         this.port = 504
         this.schedule = []
         this.client = null
         this.nowait = false
-        this.roomMap = {}
-        this.room_types = [ "LKRA", "LKRN", "LKRO", "LZRM", "LRMS", "LPRM" ]
-        this.message_proto = [ "ALL", "OLD", "NEW", "LAST", "FIRST", "GT", "LT", "SEARCH" ]
-        this.policy_scope = [ "room", "floor", "site", "mailboxes" ];
-        //
         this.restart_agent = null;
-        //
-        this.PUBLIC_ROOM = 1
-        this.HIDDEN_ROOM = 2
-        this.INVITATION_ROOM = 4
-        this.PERSONAL_ROOM = 5
-        //
-        this.roomMap["PUBLIC"] = {}
-        this.roomMap["HIDDEN"] = {}
-        this.roomMap["INVITATION"] = {}
-        this.roomMap["PERSONAL"] = {}
-        //
-        this.last_writer = null
-        //
-        this.CLIENT_VERSION = 1000
 
         this.uploading = false
         this.downloading = false
         this.binary_data = false
         this.accrue = ''
+        this.binary_buffer = false
+        this.binary_chunks = []
+        this.binary_chunks_total_length = 0
+        this.binary_chunks_expected_length = 0
         //
         this.download_promise = null
         this.failed_data = null
         this.section_count = -1
         //
-        g_single_citadel = this
-        //
+        this.error_stack = []
     }
 
 
-
-    /**
-     * 
-     * @param {string} rt 
-     * @returns {}
-     */
-    room_type_to_string(rt) {
-        switch ( rt ) {
-            case this.PUBLIC_ROOM: { return "PUBLIC" }
-            case this.HIDDEN_ROOM: { return "HIDDEN" }
-            case this.INVITATION_ROOM: { return "INVITATION" }
-            case this.PERSONAL_ROOM: { return "PERSONAL" }
-        }
-        return "HIDDEN"
+    add_error_string(e_str) {
+        this.add_error({ "error" : e_str.substring("error".length).trim() })
     }
 
-
-
-    /**
-     * returns an object with the room features as fields
-     * and the server supplied values are associated with the fields.
-     *  see : setup_returned_room_features
-     * @param {string} room_str 
-     * @returns {object}
-     */
-    unpack_room_info(room_str) {
-        let room_parts = room_str.split('|')
-        return new CitadelRoom(room_parts)
+    add_error(e_obj) {
+        this.error_stack.unshift(e_object)
     }
 
+    last_error() {
+        return this.error_stack[0]
+    }
+
+    clear_errors() {
+        this.error_stack = []
+    }
+    
+    get_error_list() {
+        return this.error_stack
+    }
 
     /**
      * 
@@ -733,6 +593,7 @@ class CitadelClient {
     set_port(port) {
         this.port = port
     }
+
 
     //
     /**
@@ -745,7 +606,7 @@ class CitadelClient {
         }
     }
 
-    // ---- ---- ---- ---- ----
+    // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
     /**
      * 
@@ -777,10 +638,19 @@ class CitadelClient {
         //
         client.on('data', (data) => {
             if ( this.downloading ) {
-                let sdata = data.toString()
-                this.accrue += sdata
-                if ( this.test_ready(this.accrue) ) {
-                    this.download_promise(this.accrue)
+                if( this.binary_data ) {
+                    this.binary_chunks.push(data)
+                    this.binary_chunks_total_length += data.length
+                    if ( this.binary_chunks_expected_length <= this.binary_chunks_total_length ) {
+                        this.accrue = Buffer.concat(this.binary_chunks);
+                        this.download_promise(this.accrue)
+                    }
+                } else {
+                    let sdata = data.toString()         // this is going to be converted unless it says otherwise...
+                    this.accrue += sdata
+                    if ( this.test_ready(this.accrue) ) {
+                        this.download_promise(this.accrue)
+                    }
                 }
                 return;
             }
@@ -932,6 +802,212 @@ class CitadelClient {
 
     /**
      * 
+     * @param {*} buffer 
+     * @returns 
+     */
+    binary_write(buffer) {
+        return new Promise((resolve,reject) => {
+            this.client.write(buffer,(err) => {
+                if (err) {
+                    reject(err)
+                } else {
+                    resolve(true)
+                }
+            })
+        })
+    }
+
+
+    
+    /**
+     * 
+     * @param {*} buffer 
+     * @returns 
+     */
+    test_ready(buffer) {
+        return(this.section_count >= buffer.length)
+    }
+
+    /**
+     * 
+     * @param {*} count 
+     * @returns 
+     */
+    data_ready(count) {
+        this.section_count = count
+        let p = new Promise((resolve,reject) => {
+            this.download_promise = (data) => { resolve(data.length == count) }
+            this.failed_data = (data) => { reject(data.length != count) }
+        })
+        return(p)
+    }
+
+    
+    // sprintf(cret, "%d|%ld|%s|%s", (int) bytes, last_mod, filename, mimetype);
+    /**
+     * 
+     * 
+     * @param {*} resp 
+     * @param {*} is_binary 
+     */
+    async process_download_buffer(len) {
+        this.binary_data = true
+        this.downloading = true
+        //
+        this.binary_chunks_expected_length = len
+        this.binary_chunks = []
+        this.binary_chunks_total_length = 0
+
+        this.lockWriter()
+        let ok = await this.data_ready(amount)
+        this.unlockWriter()
+        if ( ok ) {
+            let buf = Buffer.concat(this.binary_chunks);
+            this.binary_chunks_expected_length = 0
+            this.binary_chunks = []
+            this.binary_chunks_total_length = 0
+            return buf
+        }
+        return false
+       //
+    }
+
+
+    /**
+     * 
+     * @param {*} path 
+     * @returns 
+     */
+    approximate_mime_type(path) {
+        let mtype = mime.getType(path)  // getExtension
+        return(mtype)
+    }
+
+    /**
+     * 
+     * @param {*} path 
+     * @returns 
+     */
+    read_file(path) {
+        try {
+            return(fs.readFileSync(path))
+        } catch(e) {
+            return(false)
+        }
+    }
+
+    // 
+    /**
+     * 
+     * @param {*} text 
+     */
+    async send_text(text) {
+        this.uploading = true
+        this.client.write(`${text}\n000\n`,(err) => {
+            this.uploading = false
+            this.next_waiting_write()
+        })
+    }
+
+
+}
+/**
+ * 
+ */
+class CitadelClient extends ClientOPs {
+    // ---- ---- ---- ---- ----
+    constructor() {
+        //
+        this.roomMap = {}
+        this.room_types = [ "LKRA", "LKRN", "LKRO", "LZRM", "LRMS", "LPRM" ]
+        this.message_proto = [ "ALL", "OLD", "NEW", "LAST", "FIRST", "GT", "LT", "SEARCH" ]
+        this.policy_scope = [ "room", "floor", "site", "mailboxes" ];
+        //
+        //
+        this.PUBLIC_ROOM = 1
+        this.HIDDEN_ROOM = 2
+        this.INVITATION_ROOM = 4
+        this.PERSONAL_ROOM = 5
+        //
+        this.roomMap["PUBLIC"] = {}
+        this.roomMap["HIDDEN"] = {}
+        this.roomMap["INVITATION"] = {}
+        this.roomMap["PERSONAL"] = {}
+        //
+        this.last_writer = null
+        //
+        this.CLIENT_VERSION = 1000
+
+        //
+    }
+
+
+
+    /**
+     * 
+     * @param {string} rt 
+     * @returns {}
+     */
+    room_type_to_string(rt) {
+        switch ( rt ) {
+            case this.PUBLIC_ROOM: { return "PUBLIC" }
+            case this.HIDDEN_ROOM: { return "HIDDEN" }
+            case this.INVITATION_ROOM: { return "INVITATION" }
+            case this.PERSONAL_ROOM: { return "PERSONAL" }
+        }
+        return "HIDDEN"
+    }
+
+
+
+    /**
+     * returns an object with the room features as fields
+     * and the server supplied values are associated with the fields.
+     *  see : setup_returned_room_features
+     * @param {string} room_str 
+     * @returns {object}
+     */
+    unpack_room_info(room_str) {
+        let room_parts = room_str.split('|')
+        return new CitadelRoom(room_parts)
+    }
+
+
+
+
+    /**
+     * 
+     * 
+        // US_LASTOLD	16		Print last old message with new
+        // US_EXPERT	32		Experienced user (suppress some of the help blurbs)
+        // US_UNLISTED	64		Unlisted userlog entry
+        // US_NOPROMPT	128		Don't prompt after each message
+        // US_DISAPPEAR	512		Use "disappearing msg prompts"
+        // US_PAGINATOR	2048		Pause after each screen of text
+     * 
+     * @returns {object}
+     */
+    unpack_user_parameters(pbits) {
+        let bits = parseInt(pbits)
+        let values = {
+            "LASTOLD" : ((bits & 16) === 0) ? false : true,
+            "EXPERT" : ((bits & 32) === 0) ? false : true,
+            "UNLISTED" : ((bits & 64) === 0) ? false : true,
+            "NOPROMPT" : ((bits & 128) === 0) ? false : true,
+            "DISAPPEAR" : ((bits & 512) === 0) ? false : true,
+            "PAGINATOR" : ((bits & 2048) === 0) ? false : true
+        }
+        return values
+    }
+
+
+
+
+
+    // ----------------------------------------------------------------------------------------------
+
+    /**
+     * 
      * @param {number} rt - the room type
      * @param {number} floor - if -1 then all floors
      * @returns 
@@ -976,10 +1052,10 @@ class CitadelClient {
     // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 
-    // "NOOP",
-    // "QNOP",
-    // "ECHO",
-    // "TIME",
+//   "NOOP" : 1,
+//   "QNOP" : 2,
+//   "ECHO" : 3,
+//   "TIME" : 4,
 
     /**
      * // NOOP
@@ -1030,11 +1106,10 @@ class CitadelClient {
         return this.handle_generic_response(resp)
     }
 
-
-    // "MESG",
-    // "USER",
-    // "PASS",
-    // "LOUT",
+//   "MESG" : 5,
+//   "USER" : 6,
+//   "PASS" : 7,
+//   "LOUT" : 8,
 
     /**
      * 
@@ -1133,11 +1208,10 @@ class CitadelClient {
 
 
 
-    // "GJWT",
-    // "AJWT",
-    // "IDEN",
-    // "QUIT",
-
+//   "GJWT" : 9,
+//   "AJWT" : 10,
+//   "IDEN" : 11,
+//   "QUIT" : 12,
 
     /**
      * // GJWT
@@ -1184,7 +1258,7 @@ class CitadelClient {
      * // IDEN
      * 
      * @param {string} developerid 
-     * @param {string} clientid 
+     * @param {string} clientid this.handle_generic_response(resp)
      * @param {string} revision 
      * @param {string} software_name 
      * @param {string} hostname 
@@ -1226,14 +1300,10 @@ class CitadelClient {
     }
 
 
-
-
-
-    // "BIFF",
-    // "RWHO",
-    // "QDIR",
-    // "RBDI",
-
+//   "BIFF" : 13,
+//   "RWHO" : 14,
+//   "QDIR" : 15,
+//   "RBDI" : 16,
 
     /**
      * "BIFF": "Count new messages that have arrived in the inbox"
@@ -1350,20 +1420,16 @@ class CitadelClient {
     }
 
 
-
-    /*
-    "AUTO",
-    "ISME",
-    "INFO",
-    "TERM",
-    "REQT",
-    "STLS",
-    "GTLS",
-    */
-
-
+//   "AUTO" : 17,
+//   "ISME" : 18,
+//   "INFO" : 19,
+//   "TERM" : 20,
+//   "REQT" : 21,
+//   "STLS" : 22,
+//   "GTLS" : 23,
 
     /**
+     * // AUTO
      * returns a list of email addresses
      * @param {string} probe - a string for partial matching
      * @returns {Array}
@@ -1545,10 +1611,10 @@ class CitadelClient {
     }
 
 
-    // "ICAL",
-    // "SEXP",
-    // "GEXP",
-    // "DEXP",
+//   "ICAL" : 24,
+//   "SEXP" : 25,
+//   "GEXP" : 26,
+//   "DEXP" : 27,
 
 
     /**
@@ -1648,8 +1714,8 @@ class CitadelClient {
 
     // ROOM DATA OPS START HERE
 
-    // "GOTO",
-    // "STAT",
+//   "GOTO" : 28,
+//   "STAT" : 29,
 
 
     /**
@@ -1705,9 +1771,9 @@ class CitadelClient {
     }
 
 
-    // "MSGS",
-    // "MARK",
-    // "SLRP",
+//   "MSGS" : 30,
+//   "MARK" : 31,
+//   "SLRP" : 32,
 
 
     /**
@@ -1795,13 +1861,13 @@ class CitadelClient {
     }
 
 
-    // "GTSN",
-    // "VIEW",
-    // "SRCH",
-    // "EUID",
-    // "DELE",
-    // "MOVE",
-    // "EMSG",
+//   "GTSN" : 33,
+//   "VIEW" : 34,
+//   "SRCH" : 35,
+//   "EUID" : 36,
+//   "DELE" : 37,
+//   "MOVE" : 38,
+//   "EMSG" : 39,
 
     /**
      * 
@@ -1981,7 +2047,7 @@ class CitadelClient {
     }
 
 
-    // "ENT0" : 40,
+// "ENT0" : 40,
 
     //
     // ENTER A MESSAGE INTO THE SYSTEM
@@ -2040,10 +2106,9 @@ console.log("post message sending text:",text)
     }
 
 
-    // "GVSN" : 41,
-    // "GVEA" : 42,
-    // "DVCA" : 43,
-
+// "GVSN" : 41,
+// "GVEA" : 42,
+// "DVCA" : 43,
 
     /**
      * //   "GVSN": "Get Valid Screen Names
@@ -2093,11 +2158,17 @@ console.log("post message sending text:",text)
 
 
 
-    // read single message
-    // "MSG0" : 44,
-    // "MSG2" : 45,
-    // "MSG4" : 46,
+// read single message
+// "MSG0" : 44,         // need a method that returns an object determined by message format
+// "MSG2" : 45,
+// "MSG4" : 46,
 
+
+    message_to_object(mlines) {
+        return {
+            "orig_lines" : mlines
+        }
+    }
 
 
     /**
@@ -2111,7 +2182,7 @@ console.log("post message sending text:",text)
         let msg_txt = this.handle_generic_response(resp)
         if ( msg_txt ) {
             let msg_lines = msg_txt.split('\n')
-            return msg_lines
+            return message_to_object(msg_lines)
         }
         return false
     }
@@ -2128,8 +2199,12 @@ console.log("post message sending text:",text)
         let cmdstr = `MSG2 ${msgnum}|${headers_only}` // 
         let resp =  await this.safe_client_write(cmdstr)
         let msg_txt = this.handle_generic_response(resp)
-        let msg_lines = msg_txt.split('\n')
-        return msg_lines
+        if ( msg_txt ) {
+            let msg_lines = msg_txt.split('\n')
+            // msg_lines should be parsed in order to get the header lines
+            return msg_lines
+        }
+        return false
     }
 
 
@@ -2145,43 +2220,237 @@ console.log("post message sending text:",text)
         let cmdstr = `MSG4 ${msgnum}|${section_token}` // 
         let resp =  await this.safe_client_write(cmdstr)
         let msg_txt = this.handle_generic_response(resp)
-        let msg_lines = msg_txt.split('\n')
-        return msg_lines
+        if ( msg_txt ) {
+            let msg_lines = msg_txt.split('\n')
+            return msg_lines
+        }
+        return false
     }
 
 
-
-
-    // mime related
-    // "MSGP" : 47, -- text/html|text/plain -- dont_decode
+// mime related
+// "MSGP" : 47, -- text/html|text/plain -- dont_decode
 
     /**
      * 
      * // MSGP 
      *      :: ctdlproto/serv_messages.c: "Select preferred format for MSG4 output"
      * 
-     * @param {string} format_prefs -- a list of preferred formats or "dont_decode"
-     * @returns 
+     * This command sets a parameter for use by another command.
+     * The format_prefs is usually a string
+     * The format_prefs can be an array of formats.
+     * 
+     * @param {string|Array} format_prefs -- a list of preferred formats or "dont_decode"
+     * @returns {string} --  OK
      */
     async get_message_preferred_format(format_prefs ="dont_decode") {
+        if ( Array.isArray(format_prefs) ) {
+            format_prefs = format_prefs.join('|')
+        }
         let cmdstr = `MSGP ${format_prefs}`
         let resp =  await this.safe_client_write(cmdstr)
         return this.handle_generic_response(resp)
     }
 
-    // "OPNA" : 48,
-    // "DLAT" : 49,
+// "OPNA" : 48,
+
+    /**
+     * 
+     * // OPNA :: ctdlproto/serv_messages.c: "Open an attachment for download"
+     * 
+     * Deprecated -- throws warning
+     *
+     * @returns 
+     */
+    async get_message_attachment(msgnum,section_token) {
+        console.warn("get_message_attachment is not in use:: citadel OPNA is deprecated. Use: download_message_attachment")
+    }
 
 
-    // WIKI -- complex command structure
+// "DLAT" : 49
+
+    /**
+     * DLAT
+     * 
+     * -- 6XX length|-1|filename|content-type|charset
+     * 
+     * @param {number} msgnum 
+     * @param {string} part 
+     * @returns {object}
+     */
+    async attachment_download(msgnum,part) {
+        if ( !msgnum ) return(-2)
+        if ( !part ) return(-2)
+        let cmdstr = `DLAT ${msgnum}|${part}`
+        let resp = await this.safe_client_write(cmdstr)
+        let response = this.handle_generic_response(resp)
+        if ( response ) {
+            if ( response[0] === '6' ) {
+                let data = response.substring(4)
+                let [len, stat, filename, content_type, charset ] = data.split('|')
+                //
+                let buffer = await this.process_download_buffer(len)
+                return {buffer, len, stat, filename, content_type, charset}
+            }
+        }
+        return false
+    }
+
+
+
+//   "WIKI" : 50,
+    /**
+     * //   "WIKI": "Commands related to Wiki management"
+     * 
+     * WIKI history|(pagename)
+     * 
+```
+position 0:	The version number of the edit
+position 1:	Timestamp of the edit
+position 2:	Name of the user who performed the edit
+```
+     * 
+     * WIKI rev|(pagename)|(version_number)|(operation)
+     * 
+```
+"showrev" - fetches the specified version of the specified message.  Its
+output wll be identical to that of a MSG2 command.
+
+"revert" - actually makes that revision the current one.  It returns OK
+OK followed by a message number.
+```
+         if cmd_str is "revert" this method returns an object with one field, `msg_number`, the number of the revision
+         if cmd_str is "showrev" this returns the message text 
+         if cmd_str is "history" this returns an array of info objects each array element describing a revion
+
+     * 
+     * @param {string} cmd_str --
+     * @param {string} pagename 
+     * @param {string} rev 
+     * @param {string} operation 
+     * @returns {Array|object|false} -- 
+     */
+    async manage_wiki(cmd_str,pagename,rev,operation) {
+        let cmdstr = ""
+        if ( cmd_str === "history" ) {
+             cmdstr = `WIKI ${cmd_str}|${pagename}`
+        } else {
+            if ( ["showrev", "revert"].includes(operation) ) {
+                cmdstr = `WIKI ${cmd_str}|${pagename}|${rev}|${operation}`
+            } else return false
+        }
+        let resp = await this.safe_client_write(cmdstr)
+        let data = this.handle_generic_response(resp)
+        if ( data ) {
+            if ( operation === "revert" ) {
+                data = data.split(" ")[1]
+                return {
+                    "msg_number" : data
+                }
+            } else if ( operation === "showrev" ) {
+                if ( data ) {
+                    // could add header info by parsing the lines
+                    return {
+                        "msg_txt" : data
+                    }
+                }
+            } else {
+                let listings = data.split('\n')
+                if ( listings[0] === "LISTING_FOLLOWS" ) {
+                    listings.shift()
+                    let revs_info_list = listings.map((line) => {
+                        let parts = line.split('|')
+                        let [version, timestamp, editor] = parts
+                        return {version, timestamp, editor}
+                    })
+                    return revs_info_list
+                }
+            }
+        }
+        return false
+    }
+
 
     // floors
 
-    // LFLR
-    // CFLR
-    // KFLR
-    // EFLR
+//   "LFLR" : 51,
+//   "CFLR" : 52,
+//   "KFLR" : 53,
+//   "EFLR" : 54,
 
+
+    /**
+     * // LFLR
+     * 
+     * @returns 
+     */
+    async list_floors() {
+        let resp =  await this.safe_client_write("LFLR")
+        let output = this.handle_generic_response(resp)
+        let floors = output.split('\n')
+        floors.shift()
+        return(floors)
+    }
+
+    /**
+     * // CFLR
+     * 
+     * @param {string} name 
+     * @param {boolean} for_real if true then really create the floor (or try); otherwise, check permission
+     * @returns {object}
+     */
+    async create_floor(name,for_real = true) {
+        if ( !name ) return -2;
+        let cmdstr = `CFLR ${name}|${for_real ? 1 : 0}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            let floor_num = output.substring(2).trim()
+            return { "floor" : name, "number" : floor_num }
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+
+
+    /**
+     * // KFLR
+     * @param {number} floornum 
+     * @param {boolean} for_real if true then really create the floor (or try); otherwise, check permission
+     * @returns {object}
+     */
+    async delete_floor(floornum,for_real) {
+        if (floornum < 0) return -1;
+        let cmdstr = `KFLR ${floornum}|${for_real ? 1 : 0}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+
+
+    /**
+     * // EFLR
+     * 
+     * @param {number} floornum 
+     * @param {string} floorname 
+     * @returns {object}
+     */
+    async edit_floor(floornum,floorname) {
+        if ( !floorname ) return -2;
+        if ( floornum < 0 ) return -1;
+        let cmdstr = `EFLR ${floornum}|${floorname}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output === "OK" ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
+    }
 
 
     // room list commands 
@@ -2189,415 +2458,162 @@ console.log("post message sending text:",text)
         // 1	FLAG		Flags for this room (one per bit, from the QR_ flags listed below)
         // 2	FLOOR		The number of the floor on which this room resides.
         // 3	LISTORDER	Listing order (the client can voluntarily sort the list this way)
-        // 4	ACL		Flags for this room (one per bit, from the QR2_ flags listed below)
+        // 4	ACL		    Flags for this room (one per bit, from the QR2_ flags listed below)
         // 5	CURVIEW		the currently configured "view" for this room
         // 6	DEFVIEW		the default "view" for this room
         // 7	LASTCHANGE	date/time stamp of the last write to this room
-    // LKRN
-    // LKRO
-    // LZRM
-    // LKRA
-    // LRMS
-    // LPRM
+
+/**
+ * 
+*/
+// class RoomListElement{
+//     constructor(fields) {
+//         this.Name = fields[0]
+//         this.flag = fields[1]
+//         this.floor = parseInt(fields[2])
+//         this.list_order = parseInt(fields[3])
+//         this.acl = parseInt(fields[4])
+//         this.currrent_view = parseInt(fields[5])
+//         this.default_view = parseInt(fields[6])
+//         this.lastchange = parseInt(fields[7])
+//     }
+// }
+
+
+
+//   "LKRN" : 55,
+//   "LKRO" : 56,
+//   "LZRM" : 57,
+//   "LKRA" : 58,
+//   "LRMS" : 59,
+//   "LPRM" : 60,
+
+
+    /**
+     * // LKRN
+     * 
+     * @param {number} floornum 
+     * @param {string} floorname 
+     * @returns {object}
+     */
+    async list_rooms(by_type) {
+        let cmdstr = by_type
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("LISTING_FOLLOWS") ) {
+            //
+            let lines = output.split('\n')
+            lines.shift()
+            let room_list = lines.map((line) => {
+                let line_parts = line.split('|')
+                let room = new RoomListElement(line_parts)
+                return room
+            })
+            // 
+            return room_list
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+
+    async list_all_known_rooms_with_new_messages() {
+        return await this.list_rooms(`LKRN`)
+    }
+
+    async list_all_rooms_with_old_messages() {
+        return await this.list_rooms(`LKRO`)
+    }
+
+    async list_all_zapped_rooms() {
+        return await this.list_rooms(`LZRM`)
+    }
+
+    async list_all_known_rooms() {
+        return await this.list_rooms(`LKRA`)
+    }
+
+    async list_all_accessible_rooms() {
+        return await this.list_rooms(`LRMS`)
+    }
+
+//   "LPRM" : 60,
+    async list_all_public_rooms() {
+        return await this.list_rooms(`LPRM`)
+    }
+    
+
+//   "RDIR" : 61,
+//   "GETR" : 62,
+//   "SETR" : 63,
+//   "RINF" : 64,
+//   "GETA" : 65,
+//   "SETA" : 66,
+//   "KILL" : 67,
 
     // room manipulation commands
     // RDIR     -- a filename, the length of the file, and a description
-    // GETR
-    // SETR
-    // RINF
-    // SETA
-    // KILL
-    // CRE8
-    // FORG
-    // EINF
-    // INVT
-    // WHOK
-    // KICK
-
-    // room's file directory
-    // DELFs
-    // MOVF
-    // OPEN
-    // CLOS
-    // READ
-    // UOPN
-    // UCLS
-    // WRIT
-    // UIMG
-    // OIMG
-    // DLRI
-    // ULRI
-    
-
-
-    // Commands that change the behavior of this Citadel System
-
-    // CONF     -- a complex of subcommands
-
-
-    // Commands related to the auto-purger
-
-    // GPEX
-    // SPEX
-    // TDAP
-
-
-    // Server Maintenance Commands
-
-    // SMTP
-    // DOWN
-    // SCDN
-    // HALT
-
-    // Session authentication
-    // NEWU
-    // CREU
-    // VALI
-    // QUSR
-    // LIST  -- user listing
-
-
-    // Commands which manipulate user records
-    // SETP
-    // GETU
-    // SETU
-    // EBIO
-    // RBIO
-    // DLUI
-    // ULUI
-    // AGUP | ASUP
-    // AGEA
-    // ASEA
-    // RENU
-    // GNUR
-    // GREG
-    // REGI
-    // CHEK
-
-
-    // Runtime Attribute Manipulation
-    // STEL
-
+    // a filename, the length of the file, and a description.
 
     /**
      * 
-     * 
-    //   "RCHT": "Participate in real time chat in a root",
-        // Chat mode
-        // RCHT
-        // RCHT enter
-        // RCHT exit
-        // RCHT send
-        // RCHT poll[|newer_than]
-        // RCHT rwho    
-     * @param {string} cmd_str 
-     * @param {string} cmd_pars - optional
-     * @returns 
      */
-    async real_time_chat(cmd_str,cmd_pars = false) {
-        let cmdstr = `RCHT ${cmd_str}`
-        if ( cmd_pars ) {
-            cmdstr += `|${cmd_pars}`
-        }
-        let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
-
-
-    // LAST COMMAND FIXUP
-
-
-
-    /**
-     * 
-     * @param {string} pop_pass 
-     * @returns 
-     */
-    async tryApopPassword(pop_pass) {  // cret ... 
-        if (!pop_pass) return -2;
-        let cmdstr = "PAS2 " + pop_pass
-        let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-    /**
-     * 
-     * 
-        // US_LASTOLD	16		Print last old message with new
-        // US_EXPERT	32		Experienced user (suppress some of the help blurbs)
-        // US_UNLISTED	64		Unlisted userlog entry
-        // US_NOPROMPT	128		Don't prompt after each message
-        // US_DISAPPEAR	512		Use "disappearing msg prompts"
-        // US_PAGINATOR	2048		Pause after each screen of text
-     * 
-     * @returns {object}
-     */
-    unpack_user_parameters(pbits) {
-        let bits = parseInt(pbits)
-        let values = {
-            "LASTOLD" : ((bits & 16) === 0) ? false : true,
-            "EXPERT" : ((bits & 32) === 0) ? false : true,
-            "UNLISTED" : ((bits & 64) === 0) ? false : true,
-            "NOPROMPT" : ((bits & 128) === 0) ? false : true,
-            "DISAPPEAR" : ((bits & 512) === 0) ? false : true,
-            "PAGINATOR" : ((bits & 2048) === 0) ? false : true
-        }
-        return values
-    }
-
-
-    /**
-     * 
-     * @returns {object}
-     */
-    async get_user_parameters() {
-        try {
-            let resp =  await this.safe_client_write("GETU ")
-            let output = this.handle_generic_response(resp)
-            let report = this.unpack_user_parameters(output)
-            return(report)
-        } catch (e) {
-            return false
-        }
-    }
- 
-
-    /**
-     * 
-     * //   "SETU": "Set User parameters"
-     * 
-     * @returns 
-     */
-    async set_user_parameters(params) {
-        let cmdstr = `SETU ${params}`
-        let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
- 
-
-    /**
-     * 
-     * //   "LIST": "List users"
-     * 
-     * @returns 
-     */
-    async set_user_parameters(search_pattern) {
-        let cmdstr = `LIST ${search_pattern}`
-        let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
- 
-    
-
-
-
-
-
-
-    /**
-     * 
-     * @param {*} roomname 
-     * @param {*} floor 
-     * @param {*} password 
-     * @returns 
-     */
-    async createPasswordRoom(roomname,floor,password) {
-        let cmd = `CRE8 1|${roomname}|3|${password}|${floor}`
-        let resp =  await this.safe_client_write(cmd)
-        let output = this.handle_generic_response(resp)
-        return(output)
-
-    }
-
-
-
-
-    /**
-     * 
-     * @returns 
-     */
-    async list_floors() {
-        let resp =  await this.safe_client_write("LFLR")
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-    /**
-     * 
-     * @param {*} pass 
-     * @returns 
-     */
-    async set_password(pass) {
-        let cmdstr = "SETP " + pass
-        let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-    /**
-     * 
-     * @param {*} username 
-     * @param {*} pass 
-     * @returns 
-     */
-    async create_user(username,pass) {
-        try {
-            let cmdstr = "NEWU " + username
-            let resp =  await this.safe_client_write(cmdstr)
-            await this.set_password(pass)
-            return(resp.response)
-        } catch ( e ) {
-            console.log("create user: " + e.message)
-            return(false)
-        }
-    }
-
-    /**
-     * 
-     * @param {*} username 
-     * @returns 
-     */
-    async admin_create_user(username) {
-        try {
-            let cmdstr = "CREU " + username
-            let resp = await this.safe_client_write(cmdstr)
-            let output = this.handle_generic_response(resp)
-            return(output)
-        } catch ( e ) {
-            console.log("admin create user: " + e.message)
-            return(false)
-        }
-    }
-    
-    /**
-     * 
-     * @param {*} oldname 
-     * @param {*} newname 
-     * @returns 
-     */
-    async rename_user(oldname,newname) {
-        if (!oldname) return -2;
-        if (!newname) return -2;
-        let cmdstr = `RENU ${oldname}|${newname}`
+    async read_directory(by_type) {
+        let cmdstr = 'RDIR'
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-    // 
-
-
-    /**
-     * 
-     * // OPNA :: ctdlproto/serv_messages.c: "Open an attachment for download"
-     * 
-     *
-     * @returns 
-     */
-    async get_message_attachment(msgnum,section_token) {
-        let cmdstr = "OPNA ${msgnum} ${section_token}"
-        let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
-
-    /**
-     * 
-     * DLAT :: ctdlproto/serv_messages.c: "Download an attachment"
-     * 
-     * @returns 
-     */
-    async download_message_attachment(msgnum,section_token) {
-        let cmdstr = "DLAT ${msgnum} ${section_token}"
-        let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
-    /**
-     * 
-     * @returns 
-     */
-    async who_knows_room() {
-        let resp =  await this.safe_client_write("WHOK")
-        return this.handle_generic_response(resp)
-    }
-
-
-    /**
-     * 
-     */
-    async read_directory() {
-        let resp =  await this.safe_client_write("RDIR")
-        return this.handle_generic_response(resp)
-    }
-    
-    /**
-     * 
-     * @returns 
-     */
-    async read_directory() {
-        let resp =  await this.safe_client_write("RDIR")
-        return this.handle_generic_response(resp)
-    }
-
-
-    /**
-     * 
-     * @param {*} username 
-     * @returns 
-     */
-    async invite_user_to_room(username) {
-        let cmdstr = "INVT " + username
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-    /**
-     * 
-     */
-    async kickout_user_from_room(username) {
-        let cmdstr = "KICK " + username
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( output.startsWith("LISTING_FOLLOWS") ) {
+            //
+            let lines = output.split('\n')
+            lines.shift()
+            let dir_list = lines.map((line) => {
+                let line_parts = line.split('|')
+                let dir =  {
+                    "file" : {
+                        "name" : line_parts[0].trim(),
+                        "length" : line_parts[1].trim(),
+                    },
+                    "description" : line_parts[2].trim()
+                }
+                return dir
+            })
+            // 
+            return dir_list
+        }
+        this.add_error_string(output)
+        return(false)
     }
 
 
     
     /**
-     * 
-     * @returns 
+     * // GETR
+     * @returns {RoomDescriptor}
      */
     async get_room_attributes() {
         let resp =  await this.safe_client_write("GETR")
         if ( resp.bucket === 2 ) {
             let output =  this.handle_generic_response(resp)
-            let fields = output.split('|')
-            return new RoomDescriptor(fields)
+            if ( output.startsWith("OK") ) {
+                let fields = output.split('|')
+                return new RoomDescriptor(fields)
+            } else {
+                this.add_error_string(output)
+                return(false)
+            }
         }
         return resp.status
     }
 
 
     /**
-     * 
-     * @param {*} roomDescr 
-     * @param {*} forget 
+     * // SETR
+     * @param {object} roomDescr  -- RoomDescriptor
+     * @param {boolean} forget 
      * @returns 
      */
     async set_room_attributes(roomDescr,forget) {
         let cmdstr = `SETR ${roomDescr.QRname}|${roomDescr.QRpasswd}|${roomDescr.QRdirname}|`
-            cmdstr += `${roomDescr.QRflags}|${forget}|${roomDescr.QRfloor}|${roomDescr.QRorder}|`
+            cmdstr += `${roomDescr.QRflags}|${forget ? 1 : 0 }|${roomDescr.QRfloor}|${roomDescr.QRorder}|`
             cmdstr += `${roomDescr.QRdefaultview}|${roomDescr.QRflags2}`
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
@@ -2605,43 +2621,84 @@ console.log("post message sending text:",text)
     }
 
 
-
     /**
-     * //   "SETA" :: ctdlproto/serv_rooms.c: "Set the room admin for this room"
-     * 
-     * @returns 
-     */
-    async set_room_admin(administator) {
-        let cmdstr = `SETA ${administator}`
-        let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
-    /**
-     * 
-     * @returns 
-     */
-    async get_room_aide() {
-        let cmdstr = "GETA"
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-    /**
-     * 
+     * // RINF : 64,
+     *  (see MSG0)
      * @returns 
      */
     async room_info() {
         let cmdstr = "RINF"
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        return(output)
+        if ( output && output.startsWith("LISTING_FOLLOWS" ) ) {
+            let msg_lines = output.split('\n')
+            return message_to_object(msg_lines)     // fix for MSG0
+        }
+        return({ "error" : output.substring("error".length).trim() })
     }
 
+
+//   "GETA" : 65,
+//   "SETA" : 66,
+
+
     /**
+     * // GETA : 65,
+     * @returns 
+     */
+    async get_room_admin() {
+        let cmdstr = "GETA"
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            return output.substring(2).trim()
+        }
+        return({ "error" : output.substring("error".length).trim() })
+    }
+
+
+    /**
+     * //   "SETA" :: ctdlproto/serv_rooms.c: "Set the room admin for this room"
+     * 
+     * @returns {true|error}
+     */
+    async set_room_admin(administator) {
+        let cmdstr = `SETA ${administator}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+
+
+
+    /**
+     * // KILL : 67,
+     * //           "Kill (delete) the current root"
+     * 
+     * @returns 
+     */
+    async delete_current_room() {
+        let cmdstr = 'KILL'
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+
+    
+//   "CRE8" : 68,
+//   "FORG" : 69,
+
+    /**
+     * 
+     * // CRE8 : 68
      * 
      * @param {*} for_real 
      * @param {*} roomname 
@@ -2664,74 +2721,72 @@ console.log("post message sending text:",text)
         try {
             let resp = await this.safe_client_write(cmdstr)
             let output = this.handle_generic_response(resp)
-            return(output)    
+            if ( output.startsWith("OK") ) {
+                return true
+            }
+            this.add_error_string(output)
+            return(false)
         } catch (e) {
             console.warn(e.message)
         }
         return(false)
     }
 
+
     /**
+     * // CRE8 : 68
      * 
+     * @param {string} roomname 
+     * @param {string} floor 
+     * @param {string} password 
+     * @returns 
+     */
+    async createPasswordRoom(roomname,floor,password) {
+        let cmd = `CRE8 1|${roomname}|3|${password}|${floor}`
+        let resp =  await this.safe_client_write(cmd)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+
+    /**
+     * // FORG
      * @returns 
      */
     async forget_room() {
         let cmdstr = "FORG"
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-
-
-
-
-    /**
-     * 
-     * @returns 
-     */
-    async unvalidated_user() {
-        let cmdstr = "GNUR"
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-    /**
-     * 
-     * @param {*} username 
-     * @returns 
-     */
-    async user_registration(username) {
-        let cmdstr = "GREG"
-        if (username) {
-            cmdstr = "GREG " + username
+        if ( output.startsWith("OK") ) {
+            return true
         }
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        this.add_error_string(output)
+        return(false)
     }
 
-    /**
-     * 
-     * @param {*} username 
-     * @param {*} axlevel 
-     * @returns 
-     */
-    async validate_user(username,axlevel) {
-        if ( !username ) return(-2)
-        if ( !axlevel ) return(-2)
-        //
-        let cmdstr = `VALI ${username}|${axlevel}`
-        let resp = await this.safe_client_write(cmdstr)
+
+/**
+ * 
         let output = this.handle_generic_response(resp)
-        return(output)
-    }
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
+
+ */
+
+//   "EINF" : 70,
+//   "INVT" : 71,
+//   "WHOK" : 72,
+//   "KICK" : 73,
+
+
 
     /**
-     * 
-     * @param {*} for_real 
+     * // EINF
+     * @param {boolean} for_real 
      * @returns 
      */
     async set_room_info(for_real) {
@@ -2741,35 +2796,82 @@ console.log("post message sending text:",text)
         return(output)
     }
 
+
+
     /**
      * 
+     * @param {*} username 
      * @returns 
      */
-    async set_registration() {
-        let cmdstr = 'REGI'
+    async invite_user_to_room(username) {
+        let cmdstr = "INVT " + username
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
         return(output)
     }
 
 
-
-
-
-
+    /**
+     * 
+     * @returns {Array|false}
+     */
+    async who_knows_room(all_q) {
+        let resp =  all_q ? await this.safe_client_write("WHOK ALL") : await this.safe_client_write("WHOK")
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("LISTING_FOLLOWS") ) {
+            let lines = output.split('\n')
+            lines.shift()
+            if ( all_q ) {
+                return lines
+            } else {
+                let user_knows_room = lines.map((line) => {
+                    let [user,knows] = line.split('|')
+                    return { user, knows }
+                })
+                return user_knows_room
+            }
+        }
+        this.add_error_string(output)
+        return(false)
+    }
 
 
 
     /**
+     * // KICK : 73
      * 
-     * @returns 
      */
-    async misc_check() {
-        let cmdstr = 'CHEK'
+    async kickout_user_from_room(username) {
+        let cmdstr = "KICK " + username
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        return(output)
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
     }
+
+
+
+    // room's file directory
+
+//   "DELF" : 74,
+//   "MOVF" : 75,
+
+    // download/upload ...
+
+//   "OPEN" : 76,
+//   "CLOS" : 77,
+//   "READ" : 78,
+//   "UOPN" : 79,
+//   "UCLS" : 80,
+//   "WRIT" : 81,
+//   "UIMG" : 82,
+//   "OIMG" : 83,
+//   "DLRI" : 84,
+//   "ULRI" : 85,
+
 
     /**
      * 
@@ -2777,6 +2879,7 @@ console.log("post message sending text:",text)
      * @returns 
      */
     async delete_file(filename) {
+        if (!filename) return -2;
         let cmdstr = `DELF ${filename}`
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
@@ -2798,338 +2901,10 @@ console.log("post message sending text:",text)
         return(output)
     }
 
-    // ---- ---- ---- ---- 
-    /**
-     * 
-     * @param {*} username 
-     * @returns 
-     */
-    async query_username(username) {
-        let cmdstr = 'QUSR ' + username
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
 
     /**
      * 
-     * @returns 
-     */
-    async floor_listing() {
-         let cmdstr = 'LFLR'
-         let resp = await this.safe_client_write(cmdstr)
-         let output = this.handle_generic_response(resp)
-         return(output)
-    }
-
-    /**
-     * 
-     * @param {*} name 
-     * @param {*} for_real 
-     * @returns 
-     */
-    async create_floor(name,for_real) {
-        if ( !name ) return -2;
-        let cmdstr = `CFLR ${name}|${for_real}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-    
-    /**
-     * 
-     * @param {*} floornum 
-     * @param {*} for_real 
-     * @returns 
-     */
-    async delete_floor(floornum,for_real) {
-        if (floornum < 0) return -1;
-        let cmdstr = `KFLR ${name}|${for_real}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-    /**
-     * 
-     * @param {*} floornum 
-     * @param {*} floorname 
-     * @returns 
-     */
-    async edit_floor(floornum,floorname) {
-        if ( !floorname ) return -2;
-        if ( floornum < 0 ) return -1;
-        let cmdstr = `EFLR ${floornum}|${floorname}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-
-    // ---- ---- ---- ---- 
-
-    /**
-     * 
-     * @param {*} username 
-     * @returns 
-     */
-    async get_bio(username) {
-        if ( !bio ) return -2;
-        let cmdstr = `RBIO ${username}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-    /**
-     * 
-     * @param {*} mode 
-     * @returns 
-     */
-    async stealth_mode(mode) {
-        let cmdstr = `STEL ${mode}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-    /**
-     * 
-     * @returns 
-     */
-    async terminate_server_now() {
-        let cmdstr = 'DOWN'
-        let resp = await this.safe_client_write(cmdstr)
-        this.send_text(bio)
-        return(resp.status)
-    }
-
-
-    /**
-     * 
-     * //   "HALT": "halt the server without exiting the server process"
-     * 
-     * @returns 
-     */
-    async halt_server_now() {
-        let cmdstr = 'HALT'
-        let resp = await this.safe_client_write(cmdstr)
-        this.send_text(bio)
-        return(resp.status)
-    }
-    
-
-
-
-    /**
-     * 
-     * @param {*} mode 
-     * @returns 
-     */
-    async terminate_server_scheduled(mode) {
-        let cmdstr = `SCDN ${mode ? 1 : 0}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-    // 
-    /**
-     * 
-     * 
-     * 
-        0	User name
-        1	Password
-        2	Flags (see libcitadel.h; US_*)
-        3	(empty field)
-        4	(empty field)
-        5	Access level
-        6	User number
-        7	Timestamp of last call
-        8	Purge time (in days) for this user (or 0 to use system default)
-     * 
-     * 
-     * @param {*} who 
-     * @returns 
-     */
-    async aide_get_user_parameters(who) {
-        let cmdstr = `AGUP ${who}`
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 2 ) {
-            let output =  this.handle_generic_response(resp)
-            let fields = output.split('|')
-            return new CitadelAideUser(fields)
-        }
-        return(resp.status)
-    }
-
-    /**
-     * 
-     * @param {*} cit_user 
-     * @returns 
-     */
-    async aide_set_user_parameters(cit_user) {
-        //
-        if ( !(cit_user instanceof CitadelAideUser) ) return -2;
-        let cmdstr = `ASUP ${cit_user.fullname}|${cit_user.password}|${cit_user.flags}|`
-            cmdstr += `${cit_user.timescalled}|${cit_user.posted}|${cit_user.axlevel}|${cit_user.usernum}|`
-            cmdstr += `${cit_user.lastcall}|${cit_user.lastcall}`        
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
-    }
-
-    /**
-     * 
-     * @param {*} who 
-     * @returns 
-     */
-    async aide_get_email_addresses(who) {
-        let cmdstr = `AGEA ${who}`
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 1 ) {
-            let output =  this.handle_generic_response(resp)
-            return(output)
-        }
-        return(resp.status)
-    }
-    
-
-    /**
-     * 
-     * @param {*} which 
-     * @returns 
-     */
-    async get_message_expiration_policy(which) {
-        if ( (which < 0) || (which > 3) ) return -2;
-        let policy = this.expiration_policies[which]
-        let cmdstr = `GPEX ${policy}`
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            return new ExpirationPolicy(resp.response[0],resp.response[1])
-        }
-        return(resp.status)
-    }
-
-    /**
-     * 
-     * @param {*} which 
-     * @param {*} policy 
-     * @returns 
-     */
-    async set_message_expiration_policy(which,policy) {
-        if ( (which < 0) || (which > 3) ) return -2;
-        let scope = this.policy_scope[which]
-        let cmdstr = `SPEX ${scope}|${policy.expire_mode}|${policy.expire_mode}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-
-
-    /**
-     * 
-     * //   "TDAP": "Manually initiate auto-purger"
-     * 
-     * @returns 
-     */
-    async initiate_auto_purger() {
-        let cmdstr = 'TDAP'
-        let resp = await this.safe_client_write(cmdstr)
-        this.send_text(bio)
-        return(resp.status)
-    }
-    
-
-
-    /**
-     * 
-     * @returns 
-     */
-    async get_system_config() {
-        let cmdstr = `CONF GET`
-        let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
-    }
-    
-    
-    /**
-     * 
-     * @param {*} mimetype 
-     * @param {*} listing 
-     * @returns 
-     */
-    async get_system_config_by_type(mimetype,listing) {
-        if ( !mimetype ) return -2;
-        let cmdstr = `CONF GETSYS|${mimetype}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
-    }
-
-    // 
-    /**
-     * 
-     * @param {*} mimetype 
-     * @returns 
-     */
-    async set_system_config_by_type(mimetype) {
-        let cmdstr = `CONF PUTSYS|${mimetype}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
-    }
-
-    /**
-     * 
-     * @param {*} session 
-     * @returns 
-     */
-    async set_room_network_config(session) {
-        if ( session < 0 ) return -2;
-        let cmdstr = `SNET`
-        let resp = await this.safe_client_write(cmdstr)
-        this.send_text(listing)
-        return(resp.status)
-    }
-
-
-
-    /**
-     * 
-     * @param {*} msgnum 
-     * @param {*} seen 
-     * @returns 
-     */
-    async set_message_seen(msgnum,seen) {
-        if ( msgnum < 0 ) return -2;
-        let cmdstr = `SEEN ${msgnum}|${seen}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
-    }
-
-
-    /**
-     * 
-     * @param {*} secret 
-     * @returns 
-     */
-    async internal_program(secret) {
-        let cmdstr = `IPGM ${secret}`
-        let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
-    }
-
-    // download/upload ...
-
-    /**
+     * OPEN : 76,
      * 
      * @param {*} filename 
      * @returns 
@@ -3143,41 +2918,25 @@ console.log("post message sending text:",text)
         }
     }
 
-    // 
-    /**
-     * 
-     * @param {*} msgnum 
-     * @param {*} part 
-     * @returns 
-     */
-    async attachment_download(msgnum,part) {
-        if ( !msgnum ) return(-2)
-        if ( !part ) return(-2)
-        let cmdstr = `OPNA ${msgnum}|${part}`
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            this.process_download(resp,true)
-        }
-        return(resp.status)
-    }
 
     /**
      * 
-     * @param {*} filename 
-     * @returns 
+     * // CLOS : 77,
+     * 
      */
-    async image_download(filename) {
-        if ( !filename ) return(-2)
-        let cmdstr = `OIMG ${msgnum}`
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            this.process_download(resp,true)
-        }
-        return(resp.status)
+    async end_download() {
+        let cmdstr = `CLOS`
+        let resp = await this.safe_client_write(cmdstr,false,true)
+        this.downloading = false
+        return resp.status
     }
 
 
+
+
     /**
+     * 
+     * UOPN : 79
      * 
      * @param {*} save_as 
      * @param {*} comment 
@@ -3204,187 +2963,59 @@ console.log("post message sending text:",text)
 
 
 
+    // sprintf(cret, "%d|%ld|%s|%s", (int) bytes, last_mod, filename, mimetype);
     /**
      * 
-     * @param {*} for_real 
-     * @param {*} save_as 
-     * @param {*} path 
-     * @returns 
+     * READ : 78,
+     * 
+     * @param {*} resp 
+     * @param {*} is_binary 
      */
-    async image_upload(for_real,save_as,path) {
-        if (!save_as) return -1;
-        if (!comment) return -1;
-        if (!path) return -1;
-        let mimetype = this.approximate_mime_type(path)
-        let filedata = this.read_file(path)  // a buffer
+    async process_download(resp,is_binary) {
+        this.downloading = true
+        this.binary_data = is_binary
+        let len = rep.response[0]
+        let last_mod = resp.response[1]
+        let mimetype = (resp.response[2].split('|'))[2]
         this.lockWriter()
-        let cmdstr = `UIMG ${for_real}|${mimetype}|${save_as}`
-        let resp = await this.safe_client_write(cmdstr)
-        //
-        if ( resp.bucket == 2 ) {
-            let success = await this.binary_upload(filedata)
-            this.end_upload(success)
+        let offset = 0
+        while ( offset < len ) {
+            let amount = Math.min(4096,len - offset)
+            let cmdstr = `READ ${offset}|${amount}`
+            this.downloading = false
+            let part_resp = await this.safe_client_write(cmdstr,false,true)
+            this.downloading = true
+            if ( part_resp.bucket === 8 ) {   // ???
+                let ok = await this.data_ready(amount)
+            }
         }
+        this.binary_data = !is_binary
+        this.end_download()
         this.unlockWriter()
+       //
     }
 
 
 
     /**
-     * 
+     * // UCLS : 80
+     * @param {boolean} discard 
      * @returns 
      */
-    async downLoad_room_image() {
-        let cmdstr = 'DLRI'
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            this.process_download(resp,true)
-        }
-        return(resp.status)
+    async end_upload(discard) {
+        let cmdstr = `UCLS ${discard ? 1 : 0}`
+        let resp = await this.safe_client_write(cmdstr,false,true)
+        return resp.status
     }
+    //  //  //
 
-
-    /**
-     * 
-     * @param {*} image_size 
-     * @param {*} save_as 
-     * @param {*} path 
-     * @returns 
-     */
-    async room_image_upload(image_size,save_as,path) {
-        if (!save_as) return -1;
-        if (!comment) return -1;
-        if (!path) return -1;
-        let mimetype = this.approximate_mime_type(path)
-        let filedata = this.read_file(path)  // a buffer
-        this.lockWriter()
-        let cmdstr = `ULRI ${image_size}|${mimetype}|${save_as}`
-        let resp = await this.safe_client_write(cmdstr)
-        //
-        if ( resp.bucket == 2 ) {
-            let success = await this.binary_upload(filedata)
-            this.end_upload(success)
-        }
-        this.unlockWriter()
-    }
-
-
-    /**
-     * 
-     * @returns 
-     */
-    async downLoad_user_image(user_name) {
-        let cmdstr = `DLUI ${user_name}`
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            this.process_download(resp,true)
-        }
-        return(resp.status)
-    }
 
 
 
     /**
+     * // WRIT : 81
      * 
-     * @param {*} image_size 
-     * @param {*} user_name 
-     * @param {*} path 
-     * @returns 
-     */
-    async user_image_upload(image_size,save_as,path) {
-        if (!save_as) return -1;
-        if (!comment) return -1;
-        if (!path) return -1;
-        let mimetype = this.approximate_mime_type(path)
-        let filedata = this.read_file(path)  // a buffer
-        this.lockWriter()
-        let cmdstr = `ULUI ${image_size}|${mimetype}|${user_name}`
-        let resp = await this.safe_client_write(cmdstr)
-        //
-        if ( resp.bucket == 2 ) {
-            let success = await this.binary_upload(filedata)
-            this.end_upload(success)
-        }
-        this.unlockWriter()
-    }
-
-
-    /**
-     * 
-     * @param {*} bio 
-     * @returns 
-     */
-    async set_bio(bio) {
-        if ( !bio ) return -2;
-        let cmdstr = 'EBIO'
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
-            this.send_text(bio)
-        }
-        return(resp.status)
-    }
-
-    /**
-     * 
-     * @returns 
-     */
-    async list_users_with_bios() {
-        let cmdstr = 'LBIO'
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
-            this.send_text(text)
-        }
-        return(resp.status)
-    }
-
-
-    /**
-     * 
-     * @param {*} who 
-     * @param {*} emailaddrs 
-     * @returns 
-     */
-    async aide_set_email_addresses(who,emailaddrs) {
-        if ( !who ) return -2;
-        if ( !emailaddrs ) return -2;
-        let cmdstr = `ASEA ${who}`
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
-            this.send_text(emailaddrs)
-        }
-        return(resp.status)
-    }
-
-    /**
-     * 
-     * @param {*} listing 
-     * @returns 
-     */
-    async set_system_config(listing) {
-        let cmdstr = `CONF SET`
-        let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
-            this.send_text(listing)
-        }
-        return(resp.status)
-    }
-
-    // 
-    /**
-     * 
-     * @param {*} text 
-     */
-    async send_text(text) {
-        this.uploading = true
-        this.client.write(`${text}\n000\n`,(err) => {
-            this.uploading = false
-            this.next_waiting_write()
-        })
-    }
-
-    /**
-     * 
-     * @param {*} filedata 
+     * @param {buffer} filedata 
      * @returns 
      */
     async binary_upload(filedata) {
@@ -3415,126 +3046,851 @@ console.log("post message sending text:",text)
         return status
     }
 
+
+
     /**
+     * // UIMG : 82
      * 
-     * @param {*} buffer 
+     * @param {*} for_real 
+     * @param {*} save_as 
+     * @param {*} path 
      * @returns 
      */
-    binary_write(buffer) {
-        return new Promise((resolve,reject) => {
-            this.client.write(buffer,(err) => {
-                if (err) {
-                    reject(err)
-                } else {
-                    resolve(true)
-                }
-            })
-        })
-    }
-
-
-    /**
-     * 
-     * @param {*} discard 
-     * @returns 
-     */
-    async end_upload(discard) {
-        let cmdstr = `UCLS ${discard}`
-        let resp = await this.safe_client_write(cmdstr,false,true)
-        return resp.status
-    }
-    //  //  //
-
-    /**
-     * 
-     * @param {*} buffer 
-     * @returns 
-     */
-    test_ready(buffer) {
-        return(this.section_count >= buffer.length)
-    }
-
-    /**
-     * 
-     * @param {*} count 
-     * @returns 
-     */
-    data_ready(count) {
-        this.section_count = count
-        let p = new Promise((resolve,reject) => {
-            this.download_promise = (data) => { resolve(data.length == count) }
-            this.failed_data = (data) => { reject(data.length != count) }
-        })
-        return(p)
-    }
-
-    // sprintf(cret, "%d|%ld|%s|%s", (int) bytes, last_mod, filename, mimetype);
-    /**
-     * 
-     * @param {*} resp 
-     * @param {*} is_binary 
-     */
-    async process_download(resp,is_binary) {
-        this.downloading = true
-        this.binary_data = is_binary
-        let len = rep.response[0]
-        let last_mod = resp.response[1]
-        let mimetype = (resp.response[2].split('|'))[2]
+    async image_upload(for_real,save_as,path) {
+        if (!save_as) return -1;
+        if (!path) return -1;
+        let mimetype = this.approximate_mime_type(path)
+        let filedata = this.read_file(path)  // a buffer
         this.lockWriter()
-        let offset = 0
-        while ( offset < len ) {
-            let amount = Math.min(4096,len - offset)
-            let cmdstr = `READ ${offset}|${amount}`
-            this.downloading = false
-            let part_resp = await this.safe_client_write(cmdstr,false,true)
-            this.downloading = true
-            if ( part_resp.bucket === 8 ) {   // ???
-                await this.data_ready(amount)
-            }
+        let cmdstr = `UIMG ${for_real}|${mimetype}|${save_as}`
+        let resp = await this.safe_client_write(cmdstr)
+        //
+        if ( resp.bucket == 2 ) {
+            let success = await this.binary_upload(filedata)
+            this.end_upload(success)
         }
-        this.binary_data = !is_binary
-        this.end_download()
         this.unlockWriter()
-       //
     }
 
 
-    //
+
+    /**
+     * // OIMG : 83
+     * @param {*} filename 
+     * @returns 
+     */
+    async image_download(filename) {
+        if ( !filename ) return(-2)
+        let cmdstr = `OIMG ${msgnum}`
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket == 2 ) {
+            this.process_download(resp,true)
+        }
+        return(resp.status)
+    }
+
+    /**
+     * DLRI : 84
+     * @returns 
+     */
+    async downLoad_room_image() {
+        let cmdstr = 'DLRI'
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket == 2 ) {
+            this.process_download(resp,true)
+        }
+        return(resp.status)
+    }
+
+
+    /**
+     * // ULRI : 85
+     * @param {*} image_size 
+     * @param {*} save_as 
+     * @param {*} path 
+     * @returns 
+     */
+    async room_image_upload(image_size,save_as,path) {
+        if (!save_as) return -1;
+        if (!comment) return -1;
+        if (!path) return -1;
+        let mimetype = this.approximate_mime_type(path)
+        let filedata = this.read_file(path)  // a buffer
+        this.lockWriter()
+        let cmdstr = `ULRI ${image_size}|${mimetype}|${save_as}`
+        let resp = await this.safe_client_write(cmdstr)
+        //
+        if ( resp.bucket == 2 ) {
+            let success = await this.binary_upload(filedata)
+            this.end_upload(success)
+        }
+        this.unlockWriter()
+    }
+
+
+
+
+    
+    // Commands that change the behavior of this Citadel System
+
+    //   "CONF" : 86,
+    // CONF     -- a complex of subcommands
+
+
     /**
      * 
+     * // CONF : 86
+     * // CONF GET
+     * 
+     * @returns 
      */
-    async end_download() {
-        let cmdstr = `CLOS`
-        let resp = await this.safe_client_write(cmdstr,false,true)
-        this.downloading = false
-        return resp.status
+    async get_system_config() {
+        let cmdstr = `CONF GET`
+        let resp = await this.safe_client_write(cmdstr)
+        let output =  this.handle_generic_response(resp)
+        return(output)
+    }
+
+    /**
+     * 
+     * @param {string} listing 
+     * @returns 
+     */
+    async set_system_config(listing) {
+        let cmdstr = `CONF SET`
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket === 4 ) {
+            this.send_text(listing)
+        }
+        return(resp.status)
+    }
+
+
+    
+    /**
+     * // CONF : 86
+     * // CONF GETSYS
+     * 
+     * @param {string} mimetype 
+     * @param {string} listing 
+     * @returns 
+     */
+    async get_system_config_by_type(mimetype,listing) {
+        if ( !mimetype ) return -2;
+        let cmdstr = `CONF GETSYS|${mimetype}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output =  this.handle_generic_response(resp)
+        return(output)
+    }
+
+    // 
+    /**
+     * 
+     * // CONF : 86
+     * // CONF PUTSYS
+     * 
+     * @param {string} mimetype 
+     * @returns 
+     */
+    async set_system_config_by_type(mimetype) {
+        let cmdstr = `CONF PUTSYS|${mimetype}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output =  this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+
+    // Commands related to the auto-purger
+
+//   "GPEX" : 87,
+//   "SPEX" : 88,
+//   "TDAP" : 89,
+
+
+    /**
+     * // GPEX : 87
+     * 
+     * @param {*} which 
+     * @returns 
+     */
+    async get_message_expiration_policy(which) {
+        if ( (which < 0) || (which > 3) ) return -2;
+        let policy = this.expiration_policies[which]
+        let cmdstr = `GPEX ${policy}`
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket == 2 ) {
+            return new ExpirationPolicy(resp.response[0],resp.response[1])
+        }
+        return(resp.status)
+    }
+
+    /**
+     * // SPEX : 88
+     * 
+     * @param {*} which 
+     * @param {*} policy 
+     * @returns 
+     */
+    async set_message_expiration_policy(which,policy) {
+        if ( (which < 0) || (which > 3) ) return -2;
+        let scope = this.policy_scope[which]
+        let cmdstr = `SPEX ${scope}|${policy.expire_mode}|${policy.expire_mode}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output =  this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+
+    /**
+     * // TDAP" : 89
+     * // "TDAP": "Manually initiate auto-purger"
+     * 
+     * @returns 
+     */
+    async initiate_auto_purger() {
+        let cmdstr = 'TDAP'
+        let resp = await this.safe_client_write(cmdstr)
+        this.send_text(bio)
+        return(resp.status)
     }
     
 
+    // Server Maintenance Commands
+
+//   "SMTP" : 90,
+
+
     /**
+     * // SMTP" : 90
      * 
-     * @param {*} path 
+```
+This command, accessible only by administrators, supports several utility operations
+which examine or manipulate Citadel's SMTP support. The first command argument
+is a subcommand telling the server what to do. The following subcommands are supported:
+
+SMTP mx|hostname	(display all MX hosts for 'hostname')
+SMTP runqueue		(attempt immediate delivery of all messages in the outbound 
+                     SMTP queue, ignoring any retry times stored there)
+```
      * @returns 
      */
-    approximate_mime_type(path) {
-        let mtype = mime.getType(path)  // getExtension
-        return(mtype)
+    async manage_smtp(cmd,hostname) {
+        let cmdstr = cmd === 'mx' ? `SMTP mx|${hostname}` : "SMTP runqueue"
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
     }
+    
+
+
+//   "DOWN" : 91,
+//   "SCDN" : 92,
+//   "HALT" : 93,
+
+    /**
+     * // DOWN : 91,
+     * @returns 
+     */
+    async terminate_server_now() {
+        let cmdstr = 'DOWN'
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+
+
 
     /**
      * 
-     * @param {*} path 
+     * SCDN : 92
+     * 
+     * @param {boolean} mode 
      * @returns 
      */
-    read_file(path) {
+    async terminate_server_scheduled(mode) {
+        let cmdstr = `SCDN ${mode ? 1 : 0}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+
+
+
+    /**
+     * 
+     *  // HALT : 93
+     *              "halt the server without exiting the server process"
+     * 
+     * @returns 
+     */
+    async halt_server_now() {
+        let cmdstr = 'HALT'
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("OK") ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+    
+
+
+    // Session authentication
+
+//   "NEWU" : 94,
+//   "CREU" : 95,
+//   "VALI" : 96,
+//   "QUSR" : 97,
+//   "LIST" : 98,  -- user listing
+
+
+    /**
+     * // NEWU : 94
+     * 
+     * @param {*} username 
+     * @param {*} pass 
+     * @returns 
+     */
+    async create_user(username,pass) {
         try {
-            return(fs.readFileSync(path))
-        } catch(e) {
+            let cmdstr = "NEWU " + username
+            let resp =  await this.safe_client_write(cmdstr)
+            await this.set_password(pass)
+            return(resp.response)
+        } catch ( e ) {
+            console.log("create user: " + e.message)
             return(false)
         }
     }
 
 
+    /**
+     * // CREU : 95
+     * @param {string} username 
+     * @returns 
+     */
+    async admin_create_user(username) {
+        try {
+            let cmdstr = "CREU " + username
+            let resp = await this.safe_client_write(cmdstr)
+            let output = this.handle_generic_response(resp)
+            return(output)
+        } catch ( e ) {
+            console.log("admin create user: " + e.message)
+            return(false)
+        }
+    }
+
+
+    /**
+     * // VALI : 96
+     * 
+     * @param {*} username 
+     * @param {*} axlevel 
+     * @returns 
+     */
+    async validate_user(username,axlevel) {
+        if ( !username ) return(-2)
+        if ( !axlevel ) return(-2)
+        //
+        let cmdstr = `VALI ${username}|${axlevel}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+    /**
+     * // QUSR" : 97
+     * 
+     * @param {*} username 
+     * @returns 
+     */
+    async query_username(username) {
+        let cmdstr = 'QUSR ' + username
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+
+    /**
+     * LIST" : 98
+     * //   "LIST": "List users"
+     * 
+     * @returns 
+     */
+    async list_users(search_pattern) {
+        let cmdstr = `LIST ${search_pattern}`
+        let resp =  await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+ 
+
+
+
+    // Commands which manipulate user records
+
+//   "SETP" : 99,
+//   "GETU" : 100,
+//   "SETU" : 101,
+//   "EBIO" : 102,
+//   "RBIO" : 103,
+//   "DLUI" : 104,
+//   "ULUI" : 105,
+
+
+    /**
+     * // SETP" : 99
+     * 
+     * @param {*} pass 
+     * @returns 
+     */
+    async set_password(pass) {
+        let cmdstr = "SETP " + pass
+        let resp =  await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+    /**
+     * // GETU : 100
+     * 
+     * @returns {object}
+     */
+    async get_user_parameters() {
+        try {
+            let resp =  await this.safe_client_write("GETU ")
+            let output = this.handle_generic_response(resp)
+            let report = this.unpack_user_parameters(output)
+            return(report)
+        } catch (e) {
+            return false
+        }
+    }
+ 
+
+    /**
+     * // SETU : 101
+     *          Set User parameters"
+     * 
+     * @returns 
+     */
+    async set_user_parameters(params) {
+        let cmdstr = `SETU ${params}`
+        let resp =  await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+ 
+
+
+
+    /**
+     * // EBIO : 102
+     * 
+     * @param {string} bio 
+     * @returns 
+     */
+    async set_bio(bio) {
+        if ( !bio ) return -2;
+        let cmdstr = 'EBIO'
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket === 4 ) {
+            this.send_text(bio)
+        }
+        return(resp.status)
+    }
+
+
+
+    /**
+     * // RBIO : 103
+     * 
+     * @param {string} username 
+     * @returns 
+     */
+    async get_bio(username) {
+        if ( !bio ) return -2;
+        let cmdstr = `RBIO ${username}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        if ( output.startsWith("LISTING_FOLLOWS") ) {
+            //
+            let lines = output.split('\n')
+            lines.shift()
+            // 
+            return lines.join('\n')
+        }
+        this.add_error_string(output)
+        return(false)
+    }
+
+
+    /**
+     * // DLUI : 104
+     * 
+     * @returns 
+     */
+    async downLoad_user_image(user_name) {
+        let cmdstr = `DLUI ${user_name}`
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket == 2 ) {
+            this.process_download(resp,true)
+        }
+        return(resp.status)
+    }
+
+
+
+    /**
+     * // ULUI : 105
+     * 
+     * 
+     * @param {*} image_size 
+     * @param {*} user_name 
+     * @param {*} path 
+     * @returns 
+     */
+    async user_image_upload(image_size,save_as,path) {
+        if (!save_as) return -1;
+        if (!comment) return -1;
+        if (!path) return -1;
+        let mimetype = this.approximate_mime_type(path)
+        let filedata = this.read_file(path)  // a buffer
+        this.lockWriter()
+        let cmdstr = `ULUI ${image_size}|${mimetype}|${user_name}`
+        let resp = await this.safe_client_write(cmdstr)
+        //
+        if ( resp.bucket == 2 ) {
+            let success = await this.binary_upload(filedata)
+            this.end_upload(success)
+        }
+        this.unlockWriter()
+    }
+
+
+//   "AGUP" : 106,
+//   "ASUP" : 107,
+//   "AGEA" : 108,
+//   "ASEA" : 109,
+
+
+    /**
+     * 
+     * // AGUP : 106
+     * 
+        0	User name
+        1	Password
+        2	Flags (see libcitadel.h; US_*)
+        3	(empty field)
+        4	(empty field)
+        5	Access level
+        6	User number
+        7	Timestamp of last call
+        8	Purge time (in days) for this user (or 0 to use system default)
+     * 
+     * 
+     * @param {*} who 
+     * @returns 
+     */
+    async aide_get_user_parameters(who) {
+        let cmdstr = `AGUP ${who}`
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket === 2 ) {
+            let output =  this.handle_generic_response(resp)
+            let fields = output.split('|')
+            return new CitadelAideUser(fields)
+        }
+        return(resp.status)
+    }
+
+    /**
+     * // ASUP : 107
+     * @param {*} cit_user 
+     * @returns 
+     */
+    async aide_set_user_parameters(cit_user) {
+        //
+        if ( !(cit_user instanceof CitadelAideUser) ) return -2;
+        let cmdstr = `ASUP ${cit_user.fullname}|${cit_user.password}|${cit_user.flags}|`
+            cmdstr += `${cit_user.timescalled}|${cit_user.posted}|${cit_user.axlevel}|${cit_user.usernum}|`
+            cmdstr += `${cit_user.lastcall}|${cit_user.lastcall}`        
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+    /**
+     * 
+     * // AGEA : 108
+     * 
+     * @param {*} who 
+     * @returns 
+     */
+    async aide_get_email_addresses(who) {
+        let cmdstr = `AGEA ${who}`
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket === 1 ) {
+            let output =  this.handle_generic_response(resp)
+            return(output)
+        }
+        return(resp.status)
+    }
+    
+
+
+    /**
+     * // ASEA : 109
+     * 
+     * @param {*} who 
+     * @param {*} emailaddrs 
+     * @returns 
+     */
+    async aide_set_email_addresses(who,emailaddrs) {
+        if ( !who ) return -2;
+        if ( !emailaddrs ) return -2;
+        let cmdstr = `ASEA ${who}`
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket === 4 ) {
+            this.send_text(emailaddrs)
+        }
+        return(resp.status)
+    }
+
+
+//   "RENU" : 110,
+//   "GNUR" : 111,
+//   "GREG" : 112,
+//   "REGI" : 113,
+//   "CHEK" : 114,
+
+    /**
+     * // RENU : 110,
+     * 
+     * @param {*} oldname 
+     * @param {*} newname 
+     * @returns 
+     */
+    async rename_user(oldname,newname) {
+        if (!oldname) return -2;
+        if (!newname) return -2;
+        let cmdstr = `RENU ${oldname}|${newname}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+
+    /**
+     * 
+     * // GNUR : 111
+     * 
+     * @returns 
+     */
+    async unvalidated_user() {
+        let cmdstr = "GNUR"
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+
+    /**
+     * // GREG" : 112
+     * 
+     * @param {*} username 
+     * @returns 
+     */
+    async user_registration(username) {
+        let cmdstr = "GREG"
+        if (username) {
+            cmdstr = "GREG " + username
+        }
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+    /**
+     * // REGI : 113
+     * 
+     * 
+     * @returns 
+     */
+    async set_registration() {
+        let cmdstr = 'REGI'
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+    
+    /**
+     * // CHEK : 114
+     * 
+     * 
+     * @returns 
+     */
+    async misc_check() {
+        let cmdstr = 'CHEK'
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+
+    // Runtime Attribute Manipulation
+//   "STEL" : 115,
+
+    /**
+     * 
+     * @param {*} mode 
+     * @returns 
+     */
+    async stealth_mode(mode) {
+        let cmdstr = `STEL ${mode}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+
+// real time chat
+
+//   "RCHT" : 116
+
+    /**
+     * 
+     * 
+    //   "RCHT": "Participate in real time chat in a root",
+        // Chat mode
+        // RCHT
+        // RCHT enter
+        // RCHT exit
+        // RCHT send
+        // RCHT poll[|newer_than]
+        // RCHT rwho    
+     * @param {string} cmd_str 
+     * @param {string} cmd_pars - optional
+     * @returns 
+     */
+    async real_time_chat(cmd_str,cmd_pars = false) {
+        let cmdstr = `RCHT ${cmd_str}`
+        if ( cmd_pars ) {
+            cmdstr += `|${cmd_pars}`
+        }
+        let resp = await this.safe_client_write(cmdstr)
+        return this.handle_generic_response(resp)
+    }
+
+
+
+
+    // THE FOLLOWING COMMANDS ARE NOT FOUND IN THE DOC PAGE
+    /*
+    PAS2 : 1
+    SEEN : 2
+    SNET : 3
+    IPGM : 4
+    LBIO : 5
+    LSUB : 6
+    ASYN : 2
+    GIBR : 7
+    PIBR : 8
+    */
+
+    // LAST COMMAND FIXUP
+
+    /**
+     * 
+     * @param {string} pop_pass 
+     * @returns 
+     */
+    async tryApopPassword(pop_pass) {  // cret ... 
+        if (!pop_pass) return -2;
+        let cmdstr = "PAS2 " + pop_pass
+        let resp =  await this.safe_client_write(cmdstr)
+        let output = this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+    /**
+     * 
+     * @param {*} session 
+     * @returns 
+     */
+    async set_room_network_config(session) {
+        if ( session < 0 ) return -2;
+        let cmdstr = `SNET`
+        let resp = await this.safe_client_write(cmdstr)
+        this.send_text(listing)
+        return(resp.status)
+    }
+
+    /**
+     * 
+     * @param {*} msgnum 
+     * @param {*} seen 
+     * @returns 
+     */
+    async set_message_seen(msgnum,seen) {
+        if ( msgnum < 0 ) return -2;
+        let cmdstr = `SEEN ${msgnum}|${seen}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output =  this.handle_generic_response(resp)
+        return(output)
+    }
+
+    /**
+     * 
+     * @param {*} secret 
+     * @returns 
+     */
+    async internal_program(secret) {
+        let cmdstr = `IPGM ${secret}`
+        let resp = await this.safe_client_write(cmdstr)
+        let output =  this.handle_generic_response(resp)
+        return(output)
+    }
+
+
+    /**
+     * 
+     * @returns 
+     */
+    async list_users_with_bios() {
+        let cmdstr = 'LBIO'
+        let resp = await this.safe_client_write(cmdstr)
+        if ( resp.bucket === 4 ) {
+            this.send_text(text)
+        }
+        return(resp.status)
+    }
 
 
     /**
@@ -3554,22 +3910,6 @@ console.log("post message sending text:",text)
         return this.handle_generic_response(resp)
     }
 
-
-
-
-
-
-
-    /**
-     * //   "KILL": "Kill (delete) the current root"
-     * 
-     * @returns 
-     */
-    async delete_current_root() {
-        let cmdstr = 'KILL'
-        let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
 
     /**
      * //   "ASYN": "enable asynchronous server responses"
@@ -3603,7 +3943,7 @@ console.log("post message sending text:",text)
      * @returns 
      */
     async put_inbox_rules(new_rules) {
-        let cmdstr = 'GIBR'
+        let cmdstr = 'PIBR'
         let resp = await this.safe_client_write(cmdstr)
         if ( resp.status ) {
             await this.send_text(new_rules)
@@ -3611,26 +3951,7 @@ console.log("post message sending text:",text)
     }
 
 
-    /**
-     * //   "WIKI": "Commands related to Wiki management"
-     * @param {*} cmd_str 
-     * @param {*} pagename 
-     * @param {*} rev 
-     * @param {*} operation 
-     * @returns 
-     */
-    async manage_wiki(cmd_str,pagename,rev,operation) {
-        let cmdstr = ""
-        if ( cmd_str === "history" ) {
-             cmdstr = `WIKI ${cmd_str}|${pagename}`
-        } else {
-            cmdstr = `WIKI ${cmd_str}|${pagename}|${rev}|${operation}`
-        }
-        let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
-    }
-
-
+    // 124 commands in total
 }
 
 
