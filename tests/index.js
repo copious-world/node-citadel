@@ -56,7 +56,6 @@ async function run() {
     console.log(new_mail_check)
 
 
-
     let jwt = await cit.generate_JWT()
     console.log(jwt)
 
@@ -64,6 +63,8 @@ async function run() {
     str = await cit.get_user_parameters()
     console.log("USER PARS LOGGED",str)
 
+
+    
 
     console.log("----")
     let roomData = await cit.rooms(cit.PERSONAL_ROOM,-1)
@@ -84,6 +85,7 @@ async function run() {
     //
 
 
+    
     roomData = await cit.rooms(cit.PUBLIC_ROOM,-1)
     console.log("Room Data PUBLIC_ROOM")
     console.dir(roomData,{ depth: 2, color : true })
@@ -103,9 +105,6 @@ async function run() {
     console.log("RESULT going to room PageContact:")
     console.dir(room_goto,{ depth: 4 })
     //
-
-    
-
 
 
     //
@@ -138,6 +137,7 @@ async function run() {
     console.log("message count:",m_count)
     // list messages
 
+    
     let msg_list = await cit.get_messages("NEW")
     console.log("MESSAGE LIST")
     console.log(msg_list)
@@ -159,11 +159,16 @@ async function run() {
 
     console.log("----------------------------------------------------------------")
 
-    let lflr = await cit.floor_listing()
+    let lflr = await cit.list_floors()
     console.log("floor listing",lflr)
     //
     //
     await cit.logout()
+
+
+
+
+
     let user_again = await cit.authenticate_JWT(jwt)
     console.dir(user_again)
 
@@ -172,10 +177,12 @@ async function run() {
     let developerid = 24,
         clientid = 3,
         revision = 2,
-        software_name = "node citadle",
+        software_name = "node citadel",
         hostname = "copious.world"
 
-    await cit.identify_software(developerid,clientid,revision,software_name,hostname)
+    if ( await cit.identify_software(developerid,clientid,revision,software_name,hostname) ) {
+        console.log("software identified")
+    }
 
     let users = await cit.on_line_users()
     console.log(users)

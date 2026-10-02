@@ -3,6 +3,7 @@
 const net = require('net')
 const fs = require('fs')
 const mime = require('mime/lite')
+const strict = require('assert/strict')
 //
 
 
@@ -256,6 +257,35 @@ class CitadelUser {
 }
 
 
+// 1	User number
+// 2	Password
+// 3	Real name
+// 4	Street address or PO Box
+// 5	City/town/village/etc.
+// 6	State/province/etc.
+// 7	ZIP or Postal Code
+// 8	Telephone number
+// 9	Access level
+// 10	Internet e-mail address
+// 11	Country
+
+
+class RVcard {
+    constructor(fields) {
+        this.number = fields[0]
+        this.password = fields[1]
+        this.name = fields[2]
+        this.address = fields[3]
+        this.city = fields[4]
+        this.state = fields[5]
+        this.postal_code = fields[6]
+        this.telephone = fields[7]
+        this.axlevel = fields[8]
+        this.e_mail_addr = fields[9]
+        this.country = fields[10]
+    }
+}
+
 
 
 /**
@@ -334,7 +364,7 @@ class ExpirationPolicy {
  * 
  */
 class CitadelInstantMessage {
-    constructor(fields) {
+    constructor(fields,text) {
         this.more_msgs = fields[0]
         this.timestamp = fields[1]
         this.flags = parseInt(fields[2])
@@ -484,7 +514,79 @@ class CitadelServerInfo {
 }
 
 
-let result_code_map = {
+
+const LISTING_FOLLOWS = 1
+const OK = 2
+const MORE_DATA = 3
+const SEND_LISTING = 4
+const ERROR = 5
+const BINARY_FOLLOWS = 6
+const SEND_BINARY = 7
+const START_CHAT = 8
+
+
+const result_code_buckets = {
+
+    1 : {
+            "symbol" : "LISTING_FOLLOWS",
+            "description" : `
+            (LISTING_FOLLOWS) means that after the server response, the server will
+            output a listing of some sort.  The client **must** read the listing,
+            whether it wants to or not.  The end of the listing is signified by the
+            string "000" on a line by itself.`
+        },
+
+    2 : {
+            "symbol" : "OK",
+            "description" : `(OK) means the command executed successfully.`
+        },
+
+    3 : {
+            "symbol" : "MORE_DATA",
+            "description" : `
+            (MORE_DATA) means the command executed partially.  Usually this means that
+            another command needs to be executed to complete the operation.  For
+            example, sending the USER command to log in a user usually results in a
+            MORE_DATA result code, because the client needs to execute a PASS command
+            to send the password and complete the login.`
+        },
+
+    4 : {
+            "symbol" : "SEND_LISTING",
+            "description" : `
+            (SEND_LISTING) is the opposite of LISTING_FOLLOWS.  It means that the
+            client should begin sending a listing of some sort.  The client *must*
+            send something, even if it is an empty listing.  Again, the listing ends
+            with "000" on a line by itself.`
+        },
+
+    5:  {
+            "symbol" : "ERROR",
+            "description" : `(ERROR) means the command did not complete.`
+        },
+
+    6 : {
+            "symbol" : "BINARY_FOLLOWS",
+            "description" : `
+            (BINARY_FOLLOWS) means that the client must immediately receive a block of
+            binary data.  The first parameter will be the number of bytes to expect.`
+        },
+
+    7 : {
+            "symbol" : "SEND_BINARY",
+            "description" :`
+            (SEND_BINARY) means that the client must immediately send a block of
+            binary data. The first parameter will always be the number of bytes.`
+    },
+    8 : {
+            "symbol" : "START_CHAT",
+            "description" :`
+            (START_CHAT) Related to email searching and specified only in the MSGS doc section.`
+    }
+}
+
+
+const error_result_code_map = {
     "10"    : "INTERNAL_ERROR",  // An internal error occurred
     "11"	: "TOO_BIG",			    // The supplied data will not fit in the allocated space.
     "12"	: "ILLEGAL_VALUE",		    // One or more parameters supplied to a command are not within the permitted ranges.
@@ -552,6 +654,8 @@ class ClientOPs {
         this.uploading = false
         this.downloading = false
         this.binary_data = false
+        this.free_download = false
+
         this.accrue = ''
         this.binary_buffer = false
         this.binary_chunks = []
@@ -567,11 +671,16 @@ class ClientOPs {
 
 
     add_error_string(e_str) {
-        this.add_error({ "error" : e_str.substring("error".length).trim() })
+        if ( typeof e_str === "string" ) {
+            this.add_error({ "error" : e_str.substring("error".length).trim() })
+        } else {
+            console.log(e_str)
+            this.add_error({ "error" : `${e_str}` })
+        }
     }
 
     add_error(e_obj) {
-        this.error_stack.unshift(e_object)
+        this.error_stack.unshift(e_obj)
     }
 
     last_error() {
@@ -605,6 +714,127 @@ class ClientOPs {
             this.restart_agent = agent;
         }
     }
+
+
+
+    /**
+     * 
+     * @param {object} resp 
+     * @returns 
+     */
+    handle_generic_response(resp) {
+        if ( resp?.response ) {
+            let output = resp.response
+            output = output.join(' ')   // putting the line back together after taking the numbers off
+            return(output)
+        } else {
+            return false
+        }
+    }
+
+
+
+    /**
+     * 
+     * @param {object} resp 
+     * @param {number} expected_bucket 
+     * @returns 
+     */
+    response_is_good(resp,expected_bucket = 2) {
+        if ( resp.bucket === expected_bucket ) {
+            return true
+        }
+        return false
+    }
+
+    /**
+     * A response has sent a longer list of data (this is text and so should show up in the next read)
+     * 
+     * @param {object} resp 
+     * @returns 
+     */
+    listing_follows(resp) {
+        return this.response_is_good(resp,LISTING_FOLLOWS)
+    }
+
+    /**
+     * A response is requesting data to be sent (string data)
+     * 
+     * @param {object} resp 
+     * @returns 
+     */
+    more_data(resp) {
+        return this.response_is_good(resp,MORE_DATA)
+    }
+
+    /**
+     *  A response is requesting list structured data to be sent (string data)
+     * 
+     * @param {*} resp 
+     * @returns 
+     */
+    send_listing(resp) {
+        return this.response_is_good(resp,SEND_LISTING)
+    }
+
+    /**
+     * This is an error code -- the connection data handler parses this out calling on promise rejections
+     * 
+     * @param {object} resp 
+     * @returns 
+     */
+    response_is_error(resp) {
+        return this.response_is_good(resp,ERROR)
+    }
+
+    /**
+     * 
+     * A response is about to send binary data that should be stored in a bufffer.
+     * This code is used directly in the connection data handler.
+     * But, this may be used to discern between data and error in the calling methods.
+     * 
+     * @param {object} resp 
+     * @returns 
+     */
+    binary_follows(resp) {
+        return this.response_is_good(resp,BINARY_FOLLOWS)
+    }
+
+
+    /**
+     * 
+     * A response is request data to be sent (binary data)
+     * 
+     * @param {object} resp 
+     * @returns 
+     */
+    send_binary(resp) {
+        return this.response_is_good(resp,SEND_BINARY)
+    }
+
+
+    /**
+     * 
+     * A response is request data to be sent (binary data)
+     * 
+     * @param {object} resp 
+     * @returns 
+     */
+    start_chat_mode(resp) {
+        return this.response_is_good(resp,START_CHAT)
+    }
+
+
+
+    // more_data(resp)          MORE_DATA
+    // send_listing(resp)       SEND_LISTING
+    // response_is_error(resp)  ERROR
+    // binary_follows(resp)     BINARY_FOLLOWS
+    // send_binary(resp)        SEND_BINARY
+    // start_chat_mode(resp)         START_CHAT
+
+
+
 
     // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -648,7 +878,7 @@ class ClientOPs {
                 } else {
                     let sdata = data.toString()         // this is going to be converted unless it says otherwise...
                     this.accrue += sdata
-                    if ( this.test_ready(this.accrue) ) {
+                    if ( (this.free_download && this.free_download_test(this.accrue)) || this.test_ready(this.accrue) ) {
                         this.download_promise(this.accrue)
                     }
                 }
@@ -656,16 +886,27 @@ class ClientOPs {
             }
             let line = data.toString().trim();
             let resp = line.split(' ')
-            let status = parseInt(resp.shift())
-            let bucket = Math.floor(status/100)
+            let status = parseInt(resp.shift())  // this is thet status delivered by citadel (hundreds e.g. 200 or 500)
+            let bucket = Math.floor(status/100)  // a status bucket ... essentially the first digit
             if ( (bucket !== 5) ) {
                 if ( this.last_writer !== null ) {
                     let data_resolution = this.last_writer
+                    if ( bucket === BINARY_FOLLOWS ) {
+                        this.binary = true      // going to read it in any case, even if the app cannot handle it
+                        this.downloading = true
+                        if ( data_resolution.use_binary_switch && (typeof data_resolution.use_binary_switch === 'function') ) {
+                            let return_cmd = resp.join(' ').trim()
+                            // process the directive before this handler release to the event queue
+                            if ( data_resolution.use_binary_switch(return_cmd) ) {
+                                return  // the usual state of affairs is below, string data will be returned 
+                            }
+                        }
+                    }
                     if ( data_resolution.resolver ) {
                         data_resolution.resolver({ 'status' : status, 'bucket' : bucket, 'response' : resp })
                     }
                 }
-            } else {
+            } else { // the 5 bucket is an error
                 if ( this.last_writer !== null ) {
                     let error_resolution = this.last_writer
                     if ( error_resolution && error_resolution.rejector ) error_resolution.rejector(new Error(line))
@@ -726,6 +967,16 @@ class ClientOPs {
 
     // ---- ---- ---- ---- ----
 
+//
+// going to set binary data
+// DLAT
+// DLUI
+// OPEN
+// READ
+// OIMG
+// DLRI
+
+
     /**
      * 
      * @param {string} str 
@@ -733,7 +984,7 @@ class ClientOPs {
      * @param {boolean} privileged 
      * @returns 
      */
-    clientWrite(str,useDelay = false,privileged = false) {
+    clientWrite(str,useDelay = false,privileged = false,use_binary_switch = false) {
         if ( this.client ) {
             let resolver = null
             let rejector = null
@@ -743,23 +994,28 @@ class ClientOPs {
             })
 
             if ( (this.uploading || this.downloading) && !privileged ) {
+
                 this.holdSchedule.push({ 
                     'resolver' : resolver,
                     'rejector' : rejector, 
-                    'writer' : () => { this.client.write(`${str}\n`) }
+                    'writer' : () => { this.client.write(`${str}\n`) },
+                    'use_binary_switch' : use_binary_switch
+
                 })
                 return p
             }
 
             if ( !useDelay ) {
                 if ( this.last_writer !== null || this.waitingDelay ) {
+                    // writers are busy; so, queue the request to be handled after the last writer is finished
                     this.schedule.push({ 
                         'resolver' : resolver,
                         'rejector' : rejector, 
-                        'writer' : () => { this.client.write(`${str}\n`) }
+                        'writer' : () => { this.client.write(`${str}\n`) },
+                        'use_binary_switch' : use_binary_switch
                     })
-                } else {
-                    this.last_writer = { 'resolver' : resolver, 'rejector' : rejector, 'writer' : null }
+                } else { // no one is blocking progress so write right now
+                    this.last_writer = { 'resolver' : resolver, 'rejector' : rejector, 'writer' : null, 'use_binary_switch' : use_binary_switch }
                     this.client.write(`${str}\n`)
                 }
             } else {
@@ -772,9 +1028,9 @@ class ClientOPs {
     }
 
 
-    async safe_client_write(cmdstr,useDelay,privileged) {
+    async safe_client_write(cmdstr,useDelay,privileged,use_binary_switch) {
         try {
-            let resp =  await this.clientWrite(cmdstr,useDelay,privileged)
+            let resp =  await this.clientWrite(cmdstr,useDelay,privileged,use_binary_switch)
             return resp
         } catch ( e ) {
             console.log("safe_client_write: " + e.message)
@@ -785,27 +1041,10 @@ class ClientOPs {
 
     /**
      * 
-     * @param {object} resp 
-     * @returns 
-     */
-    handle_generic_response(resp) {
-        if ( resp?.response ) {
-            let output = resp.response
-            output = output.join(' ')
-            return(output)
-        } else {
-            return false
-        }
-    }
-
-
-
-    /**
-     * 
      * @param {*} buffer 
      * @returns 
      */
-    binary_write(buffer) {
+    binary_write(buffer,to_write) {
         return new Promise((resolve,reject) => {
             this.client.write(buffer,(err) => {
                 if (err) {
@@ -828,6 +1067,10 @@ class ClientOPs {
         return(this.section_count >= buffer.length)
     }
 
+    free_download_test(buffer) {
+        return ( buffer.substring(buffer.length-3) === '000' )
+    }
+
     /**
      * 
      * @param {*} count 
@@ -842,10 +1085,33 @@ class ClientOPs {
         return(p)
     }
 
+
+    /**
+     * 
+     * @param {*} count 
+     * @returns 
+     */
+    data_lines_ready() {
+        this.free_download = true
+        let p = new Promise((resolve,reject) => {
+            this.download_promise = (data) => { 
+                this.free_download = false
+                resolve(data)
+            }
+            this.failed_data = (data) => {
+                this.free_download = false
+                reject(false)
+            }
+        })
+        return(p)
+    }
+
     
     // sprintf(cret, "%d|%ld|%s|%s", (int) bytes, last_mod, filename, mimetype);
     /**
      * 
+     * 
+     * use_binary_switch
      * 
      * @param {*} resp 
      * @param {*} is_binary 
@@ -857,10 +1123,8 @@ class ClientOPs {
         this.binary_chunks_expected_length = len
         this.binary_chunks = []
         this.binary_chunks_total_length = 0
-
-        this.lockWriter()
+        //
         let ok = await this.data_ready(amount)
-        this.unlockWriter()
         if ( ok ) {
             let buf = Buffer.concat(this.binary_chunks);
             this.binary_chunks_expected_length = 0
@@ -909,6 +1173,27 @@ class ClientOPs {
         })
     }
 
+    // 
+    /**
+     * 
+     * @param {*} text 
+     */
+    async send_text_and_respond(text) {
+        this.lockWriter()
+        this.downloading = true
+        let p = new Promise((resolve,reject) => {
+            this.client.write(`${text}\n000\n`,async (err) => {
+                this.uploading = false
+                this.unlockWriter()
+                if ( !err ) {
+                    let data = await this.data_lines_ready()
+                    resolve(data)
+                } else {
+                    reject(err)
+                }
+            })
+        })
+    }
 
 }
 /**
@@ -917,6 +1202,7 @@ class ClientOPs {
 class CitadelClient extends ClientOPs {
     // ---- ---- ---- ---- ----
     constructor() {
+        super()
         //
         this.roomMap = {}
         this.room_types = [ "LKRA", "LKRN", "LKRO", "LZRM", "LRMS", "LPRM" ]
@@ -1148,6 +1434,8 @@ class CitadelClient extends ClientOPs {
      * 
      * Find the user. 
      * 
+     * MORE_DATA
+     * 
      * @param {string} uname 
      * @returns {boolean}
      */
@@ -1224,11 +1512,35 @@ class CitadelClient extends ClientOPs {
         let cmdstr = 'GJWT'
         try {
             let resp = await this.safe_client_write(cmdstr)
-            return this.handle_generic_response(resp)
+            let output = this.handle_generic_response(resp)
+            if ( this.response_is_good(resp) ) {
+                let jwt_string = output
+                return jwt_string
+            }
+            this.add_error_string(output)
+            return(false)
         } catch (e) {
             console.warn(e)
             return false
         }
+    }
+
+
+    /**
+     * 
+     * @param {string} jwt_string 
+     * @returns 
+     */
+    unpack_jwt(jwt_string) {
+        let [header,payload,signature] = jwt_string.split('.')
+        let jwt_obj = {
+            header,payload,signature
+        }
+        let buf = Buffer.from(payload,"base64")
+        let decode_payload = buf.toString()
+        payload = JSON.parse(decode_payload)
+        jwt_obj.payload = payload
+        return jwt_obj
     }
 
 
@@ -1246,9 +1558,13 @@ class CitadelClient extends ClientOPs {
         let resp = await this.safe_client_write(cmdstr)
         if ( resp ) {
             let output = this.handle_generic_response(resp)
-            let user_info = output.split('|')
-            let user = new CitadelUser(user_info)
-            return user
+            if ( this.response_is_good(resp) ) {
+                let user_info = output.split('|')
+                let user = new CitadelUser(user_info)
+                return user
+            }
+            this.add_error_string(output)
+            return(false)
         }
         return false
     }
@@ -1276,8 +1592,9 @@ class CitadelClient extends ClientOPs {
 
         let cmdstr = `IDEN ${developerid}|${clientid}|${revision}|${software_name}|${hostname}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        if ( output === "OK" ) return true
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
         return(false)
     }
 
@@ -1292,7 +1609,7 @@ class CitadelClient extends ClientOPs {
      */
     async quit() {
         let resp = await this.safe_client_write("QUIT")
-        if ( resp && resp.response ) {
+        if ( resp && this.response_is_good(resp) ) {
             return true
         } else {
             return false
@@ -1328,16 +1645,20 @@ class CitadelClient extends ClientOPs {
      * 
      */
     async count_new_messages() {
-        let resp =  await this.safe_client_write("BIFF")
-        let output = this.handle_generic_response(resp)
         let mcounts = {
             "m_count" : 0,
             "im_count" : 0
         }
-        if ( output !== '0' ) {
-            let counts = output.split('|')
-            mcounts.m_count = counts[0]
-            mcounts.im_count = counts[1]
+        let resp =  await this.safe_client_write("BIFF")
+        if ( resp && this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            if ( output !== '0' ) {
+                let counts = output.split('|')
+                let c0 = counts[0]
+                let c1 = counts[1]
+                if ( c0 !== undefined )  mcounts.m_count = counts[0]
+                if ( c1 !== undefined )  mcounts.im_count = counts[1]
+            }
         }
         return(mcounts)
     }
@@ -1370,17 +1691,20 @@ class CitadelClient extends ClientOPs {
     async on_line_users() {
         let cmdstr = 'RWHO'
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        let user_list = []
-        let user_lines = output.split("\n")
-        for ( let line of user_lines ) {
-            line = line.trim()
-            if ( line === "000" ) continue
-            if ( line.length > 0 ) {
-                user_list.push(new CitadelOnlineUser(line.split('|')))
+        if ( this.listing_follows(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let user_list = []
+            let user_lines = output.split("\n")
+            for ( let line of user_lines ) {
+                line = line.trim()
+                if ( line === "000" ) continue
+                if ( line.length > 0 ) {
+                    user_list.push(new CitadelOnlineUser(line.split('|')))
+                }
             }
+            return(user_list)
         }
-        return(user_list)
+        return false // this is not supposed to happen
     }
 
 
@@ -1391,14 +1715,17 @@ class CitadelClient extends ClientOPs {
      * Applies to logged in users
      * 
      * @param {string} address -- Internet e-mail address to look up
-     * @returns {boolean}
+     * @returns {string|boolean}
      */
-    async directory_lookup(address) {
+    async lookup_email_address(address) {
         if ( !address ) return -2;
         let cmdstr = `QDIR ${address}`
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        if ( output === "OK" ) return true
+        let output = this.handle_generic_response(resp)
+        if ( this.response_is_good(resp) ) {
+            return output
+        }
+        this.add_error_string(output)
         return(false)
     }
 
@@ -1414,8 +1741,9 @@ class CitadelClient extends ClientOPs {
     async rebuild_dir_index() {
         let cmdstr = 'RBDI'
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        if ( output === "OK" ) return true
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
         return(false)
     }
 
@@ -1430,21 +1758,28 @@ class CitadelClient extends ClientOPs {
 
     /**
      * // AUTO
-     * returns a list of email addresses
+     *  returns a list of email addresses
      * @param {string} probe - a string for partial matching
      * @returns {Array}
      */
     async autocomplete(probe) {
         let cmdstr = `AUTO ${probe}`
         let resp = await this.safe_client_write(cmdstr)
-        let lines = this.handle_generic_response(resp)
-        let email_list = lines.split('\n')
-        email_list = email_list.filter((line) => {
-            if ( line.trim() === "000" ) return false
-            if ( line.trim() === "try these:" ) return false
-            return true
-        })
-        return email_list
+        if ( this.listing_follows(resp) ) {
+            let lines = this.handle_generic_response(resp)
+            if ( lines ) {
+                let email_list = lines.split('\n')
+                email_list = email_list.filter((line) => {
+                    if ( line.trim() === "000" ) return false
+                    if ( line.trim() === "try these:" ) return false
+                    return true
+                })
+                return email_list
+            }
+        } else {
+            this.add_error_string(this.handle_generic_response(resp))
+        }
+        return []
     }
 
 
@@ -1459,8 +1794,10 @@ class CitadelClient extends ClientOPs {
     async check_email_is_mine(address) {
         let cmdstr = `ISME ${address}`
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        if ( output === "OK" ) return true
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
         return(false)
     }
 
@@ -1508,12 +1845,14 @@ class CitadelClient extends ClientOPs {
      */
     async server_info() {
         let resp =  await this.safe_client_write("INFO")
-        let info_str = this.handle_generic_response(resp)
-        if ( info_str ) {
-            let info_list = info_str.split('\n')
-            info_list.shift()
-            info_list.pop()
-            return new CitadelServerInfo(info_list)
+        if ( this.listing_follows(resp) ) {
+            let info_str = this.handle_generic_response(resp)
+            if ( info_str ) {
+                let info_list = info_str.split('\n')
+                // info_list.shift()        // use this only if the server returns a header line
+                info_list.pop()
+                return new CitadelServerInfo(info_list)
+            }
         }
         return false
     }
@@ -1527,8 +1866,11 @@ class CitadelClient extends ClientOPs {
     async terminate_session(sid) {
         let cmdstr = `TERM ${sid}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -1545,8 +1887,10 @@ class CitadelClient extends ClientOPs {
         if ( session < 0 ) return -2;
         let cmdstr = `REQT ${session}`
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        if ( output === "OK" ) return true
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
         return(false)
     }
 
@@ -1554,6 +1898,8 @@ class CitadelClient extends ClientOPs {
 
     /**
      * // STLS": "Start TLS session
+     * 
+     * action required by client when this method returns true
      * 
      * Following the call to this command, the server and client must negotiated
      * TLS. Otherwise, communication with the server hangs.
@@ -1565,8 +1911,10 @@ class CitadelClient extends ClientOPs {
     async start_TLS_session() {
         let cmdstr = 'STLS'
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        if ( output === "OK" ) return true
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
         return(false)
     }
 
@@ -1597,17 +1945,28 @@ class CitadelClient extends ClientOPs {
 
     /**
      * // GTLS
+     * 
+     * 
+            0 | Protocol name, e.g. "SSLv3"
+            1 | Cipher suite name, e.g. "ADH-RC4-MD5"
+            2 | Cipher strength bits, e.g. 128
+            3 | Cipher strength bits actually in use, e.g. 128
+
      * Fetches the session's TLS parameters that were established with `start_TLS_session`
      * @returns {object|boolean}
      */
     async get_TLS_session() {
         let cmdstr = 'GTLS'
         let resp = await this.safe_client_write(cmdstr)
-        let tls_data = this.handle_generic_response(resp)
-        if ( tls_data ) {
-            tls_data = this.unpack_tls_data(tls_data)
+        if ( this.response_is_good(resp) ) {
+            let tls_data = this.handle_generic_response(resp)
+            if ( tls_data ) {
+                tls_data = this.unpack_tls_data(tls_data)
+            }
+            return tls_data
         }
-        return tls_data
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1618,7 +1977,7 @@ class CitadelClient extends ClientOPs {
 
 
     /**
-     * 
+     * ICAL : 24
      * // ICAL ": "Citadel iCalendar command"
      * 
      * commands:
@@ -1632,13 +1991,63 @@ class CitadelClient extends ClientOPs {
      * putics       -- putics       // after this command the client needs to write the calendar stream (see send_text)
      * 
      * 
-     * @param {*} probe 
+     * SEND_LISTING
+     * LISTING_FOLLOWS
+     * 
+     * 
+     * @param {string} probe 
      * @returns 
      */
-    async ical_cmd(cmd_str) {
+    async ical_cmd(cmd_str,listing = false) {
+        cmd_str = cmd_str.split('|')
+        cmd_str = cmd_str.map(part => part.trim())
+        cmd_str = cmd_str.join('|')
+        //
         let cmdstr = `ICAL ${cmd_str}`
         let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
+        //
+        let cmd_parts = cmd_str.split('|')
+        let cmd = cmd_parts[0]
+        if ( this.response_is_good(resp) ) {
+            switch ( cmd ) {
+                case "test" : { return true }
+                case "respond" : { return true }
+                case "handle_rsvp" : { return true }
+                case "sgi" : { return true }
+            }
+        } else if ( this.listing_follows(resp) ) {
+            switch ( cmd ) {
+                case "conflicts" : {
+                    let data = this.handle_generic_response(resp)
+                    let events = data.split('\n')
+                    return events
+                }
+                case "freebusy" : {
+                    let data = this.handle_generic_response(resp)
+                    let events = data.split('\n')
+                    return events
+                }
+                case "getics" : {
+                    let data = this.handle_generic_response(resp)
+                    let events = data.split('\n')
+                    return events
+                 }
+            }
+
+        } else if ( this.send_listing(resp) ) {
+            switch ( cmd ) {
+                case "putics" : {
+                    if ( listing && (typeof listing === 'string') ) {
+                        this.send_text(listing)
+                    }
+                    return true
+                }
+            }
+        } else {
+            this.add_error_string(this.handle_generic_response(resp))
+            return false
+        }
+        return true
     }
 
 
@@ -1648,25 +2057,33 @@ class CitadelClient extends ClientOPs {
      * 
      *  send text
      * 
+     * SEND_LISTING -- under certain conditions
+     * 
      * @param {string} username 
      * @param {string} text 
      * @returns 
      */
-    async send_instant_message(username,text) {
+    async send_instant_message(username,text,hyphen = false) {
         if ( !username ) return -2;
         let cmdstr = ''
-        if (text) {
-            cmdstr = `SEXP ${username}|-`
-            let resp = await this.safe_client_write(cmdstr)
-            if ( resp.bucket === 4 ) {
-                this.send_text(text)
+        if ( text ) {
+            if ( hyphen ) {
+                cmdstr = `SEXP ${username}|-`
+            } else {
+                cmdstr = `SEXP ${username}|${text}`
             }
-            return(resp.status)
         } else {
-            cmdstr = `SEXP ${username}||`
-            let resp = await this.safe_client_write(cmdstr)
-            return(resp.status)
+            cmdstr = `SEXP ${username}|`
         }
+        let resp = await this.safe_client_write(cmdstr)
+        if ( this.response_is_good(resp) ) {
+            return true
+        } else if ( this.send_listing(resp) ) {
+            this.send_text(text)
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1686,11 +2103,16 @@ class CitadelClient extends ClientOPs {
     async get_instant_message() {
         let cmdstr = 'GEXP'
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp ) {
+        if ( this.listing_follows(resp) ) {
             let output = this.handle_generic_response(resp)
             let par_lines = output.split('\n')
-            return(new CitadelInstantMessage(par_lines))
+            let parameters = par_lines.shift()?.split('|')
+            if ( parameters ) {
+                return(new CitadelInstantMessage(parameters,par_lines.join("\n")))
+            }
+            return true
         }
+        this.add_error_string(this.handle_generic_response(resp))
         return false
     }
 
@@ -1707,8 +2129,11 @@ class CitadelClient extends ClientOPs {
         mode = mode ? "1" : "0"
         let cmdstr = `DEXP ${mode}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1719,7 +2144,8 @@ class CitadelClient extends ClientOPs {
 
 
     /**
-     * // GOTO
+     *  // GOTO" : 28
+     *  // GOTO
      * 
      * @param {string} room 
      * @returns 
@@ -1727,9 +2153,13 @@ class CitadelClient extends ClientOPs {
     async goto_room(room) {
         let cmdstr = "GOTO " + room
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        let room_descr = this.unpack_room_info(output)
-        return(room_descr)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let room_descr = this.unpack_room_info(output)
+            return(room_descr)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1746,14 +2176,19 @@ class CitadelClient extends ClientOPs {
     async goto_password_room(room,password) {
         let cmdstr = `GOTO ${room}|${password}`
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        let room_descr = this.unpack_room_info(output)
-        return(room_descr)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let room_descr = this.unpack_room_info(output)
+            return(room_descr)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
 
     /**
+     * // STAT : 29
      * // STAT : "Get mtime of the current root"
      * 
      * @returns 
@@ -1761,13 +2196,17 @@ class CitadelClient extends ClientOPs {
     async get_root_mtime() {
         let cmdstr = 'STAT'
         let resp = await this.safe_client_write(cmdstr)
-        let room_stat = this.handle_generic_response(resp)
-        room_stat = room_stat.split('|')
-        room_stat = {
-            "name" : room_stat[0],
-            "mod_time" : room_stat[1]
+        if ( this.response_is_good(resp) ) {
+            let room_stat = this.handle_generic_response(resp)
+            room_stat = room_stat.split('|')
+            room_stat = {
+                "name" : room_stat[0],
+                "mod_time" : room_stat[1]
+            }
+            return room_stat
         }
-        return room_stat
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1777,7 +2216,8 @@ class CitadelClient extends ClientOPs {
 
 
     /**
-     * // MSGS
+     *  MSGS : 30
+     *  // MSGS
      * 
      * (not yet tested)
      * @param {string} which 
@@ -1790,6 +2230,7 @@ class CitadelClient extends ClientOPs {
         if ( (!which) || this.message_proto.indexOf(which) < 0 ) which = "ALL"
         //
         //  "ALL", "OLD", "NEW", "LAST", "FIRST", "GT", "LT", "SEARCH"
+        let messages = []
         let output = null
         let cmdstr = ''
         switch ( which ) {
@@ -1820,10 +2261,24 @@ class CitadelClient extends ClientOPs {
         }
         //
         let resp = await this.safe_client_write(cmdstr)
-        output = this.handle_generic_response(resp)
-        let messages = output.split('\n')
-        messages.shift()
-        messages.pop()
+        if ( this.listing_follows(resp) ) {
+            output = this.handle_generic_response(resp)
+            messages = output.split('\n')
+            messages.shift()
+            messages.pop()
+        } else if ( this.start_chat_mode(resp) ) {
+            if ( typeof mtemplate === 'string' ) {
+                try {
+                    let data_lines = await this.send_text_and_respond(mtemplate)
+                    if ( typeof data_lines === 'string' ) {
+                        messages = output.split('\n')
+                        messages.pop()
+                    }
+                } catch (e) {
+                    return false
+                }
+            }
+        }
         return(messages)
     }
 
@@ -1838,8 +2293,11 @@ class CitadelClient extends ClientOPs {
     async set_user_parameters(sequence_set) {
         let cmdstr = `MARK ${sequence_set}`
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return(true)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1856,8 +2314,11 @@ class CitadelClient extends ClientOPs {
             cmdstr = `SLRP ${msgnum}`
         }
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return(true)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1871,7 +2332,9 @@ class CitadelClient extends ClientOPs {
 
     /**
      * 
-     * // GTSN
+     * // GTSN 33        let output = this.handle_generic_response(resp)
+        return(output)
+
      * > Fetch seen/unread message flags
      * 
      * @returns 
@@ -1879,14 +2342,18 @@ class CitadelClient extends ClientOPs {
     async fetch_unread_messages() {
         let cmdstr = `GTSN`
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            let data = this.handle_generic_response(resp)
+            return(data)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
  
 
     /**
      * 
-     * // VIEW
+     * // VIEW 34
      * > Set preferred view for user/room combination
      * 
      * @returns 
@@ -1906,34 +2373,46 @@ class CitadelClient extends ClientOPs {
                 break
             }
             case "PERSONAL" : {
-                view_type = this.PERSONAL_ROOMs
+                view_type = this.PERSONAL_ROOM
                 break
             }
         }
         let cmdstr = `VIEW ${view_type}`
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return(true)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
  
 
     /**
      * 
-     * // SRCH
+     * // SRCH 35
      * > Full text search
+     * 
+     * SRCH s(deprecated...)
+     * usings MSGS search
      * 
      * @returns 
      */
     async full_text_search(search_pattern) {
-        let cmdstr = `SRCH ${search_pattern}`
-        let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        return await this.get_messages("search",search_pattern,false)
+        //
+        // let cmdstr = `SRCH ${search_pattern}`
+        // let resp =  await this.safe_client_write(cmdstr)
+        // if ( this.response_is_good(resp) ) {
+        //     return(true)
+        // }
+        // this.add_error_string(this.handle_generic_response(resp))
+        // return false
     }
 
 
     /**
-     * // EUID
+     *  // EUID : 36
+     *  // EUID exclusive message ID
      * 
      * @param {string} its_euid 
      * @returns {number}
@@ -1941,10 +2420,14 @@ class CitadelClient extends ClientOPs {
     async get_message_by_exclusive_id(its_euid) {
         let cmdstr = `EUID ${its_euid}`
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)  // will retun the message number
-        output = parseInt(output)
-        return(output)
-    }
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)  // will retun the message number
+            output = parseInt(output)
+            return(output)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
+   }
 
     
     /**
@@ -1957,9 +2440,11 @@ class CitadelClient extends ClientOPs {
     async delete_message(msgnum) {
         let cmdstr = `DELE ${msgnum}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        if ( output === "OK" ) return(true)
-        return(false)
+        if ( this.response_is_good(resp) ) {
+            return(true)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1974,8 +2459,11 @@ class CitadelClient extends ClientOPs {
     async  move_message(msgnum,destroom) {
         let cmdstr = `MOVE ${msgnum}|${destroom}|0`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return(true)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -1991,8 +2479,11 @@ class CitadelClient extends ClientOPs {
         let msglist_str = msglist.join(',')
         let cmdstr = `MOVE ${msglist_str}|${destroom}|0`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return(true)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
     /**
@@ -2006,8 +2497,11 @@ class CitadelClient extends ClientOPs {
     async  copy_message(msgnum,destroom) {
         let cmdstr = `MOVE ${msgnum}|${destroom}|1`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return(true)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
     /**
@@ -2022,8 +2516,11 @@ class CitadelClient extends ClientOPs {
         let msglist_str = msglist.join(',')
         let cmdstr = `MOVE ${msglist_str}|${destroom}|1`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return(true)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -2031,19 +2528,21 @@ class CitadelClient extends ClientOPs {
      * 
      * // EMSG
      * 
+     * 
      * Install system messages 
      * @param {string} filename 
      * @param {string} text 
-     * @returns 
+     * @returns {boolean}
      */
     async enter_system_message(filename,text) {
         if ( !filename ) return -2;
         let cmdstr = `EMSG ${filename}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
+        if ( this.send_listing(resp) ) {
             this.send_text(text)
+            return true
         }
-        return(resp.status)
+        return(false)
     }
 
 
@@ -2058,6 +2557,10 @@ class CitadelClient extends ClientOPs {
      * // ENT0
      * > check to see if it is ok to post a message
      * 
+     * SEND_LISTING
+     * START_CHAT_MODE
+     * 
+     * 
      * @param {CitadelMessage} msgObject 
      * @returns {boolean}
      */
@@ -2068,11 +2571,11 @@ class CitadelClient extends ClientOPs {
         let msg = `ENT0 0|` + msgObject.as_parameters()
         //
         let resp =  await this.safe_client_write(msg)
-        let output = this.handle_generic_response(resp)
-        if ( output === "OK" ) {
-            return true
+        if ( this.response_is_good(resp) ) {
+            return(true)
         }
-        return(false)
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
     
@@ -2080,6 +2583,19 @@ class CitadelClient extends ClientOPs {
     /**
      * // ENT0
      * > acually post a message. Perhaps, send an email to someone via SMTP
+     * 
+     * 
+     * 
+     * confirmation message:
+``` 
+        Line 1:	The new message number on the server for the message.  It will be
+            positive for a real message number, or negative to denote that an
+            error occurred.  If an error occurred, the message was not saved.
+        Line 2:	A human-readable confirmation or error message.
+        Line 3:	The resulting Exclusive UID of the message, if present. (More may
+            be added to this in the future, so do not assume that there will
+            only be these lines output.  Keep reading until 000 is received.)
+```
      * 
      * @param {object} msgObject 
      * @returns 
@@ -2091,18 +2607,32 @@ class CitadelClient extends ClientOPs {
         let msg = `ENT0 1|` + msgObject.as_parameters()
         //
         let resp =  await this.safe_client_write(msg)
-        let output = this.handle_generic_response(resp)
-        if ( output === "send message") {
+        if ( this.response_is_good(resp) ) {
+            let email_update = this.handle_generic_response(resp)
+            return email_update
+        } else if ( this.send_listing(resp) ) {
             let text = msgObject.text;
             text = text.trim()
             text = shortLines(text)
-console.log("post message sending text:",text)
-            //console.log(text)
-            text += '\n000'
-            output = await this.safe_client_write(text,true)  // clientWrite nowait
+            let output = await this.send_text(text)  // clientWrite nowait
             return(output)
+        } else if ( this.start_chat_mode(resp) ) {
+            try {
+                let text = msgObject.text;
+                text = text.trim()
+                text = shortLines(text)
+                let confirmation_msg = await this.send_text_and_respond(text)
+                if ( typeof confirmation_msg === 'string' ) {
+                    confirmation_msg = confirmation_msg.split('\n')
+                    confirmation_msg.pop()
+                    return confirmation_msg   // as an array of lines
+                }
+            } catch (e) {
+                return false
+            }
         }
-        return output       // should be start chat or false
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -2119,10 +2649,14 @@ console.log("post message sending text:",text)
     async get_valid_screen_names() {
         let cmdstr = 'GVSN'
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        let names = output.split('\n')
-        names.shift()
-        return(names)
+        if ( this.listing_follows(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let names = output.split('\n')
+            // names.shift()
+            return(names)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -2135,9 +2669,13 @@ console.log("post message sending text:",text)
         let cmdstr = 'GVEA'
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        let addresses = output.split('\n')
-        addresses.shift()
-        return(addresses)
+        if ( this.listing_follows(resp) ) {
+            let addresses = output.split('\n')
+            // addresses.shift()
+            return(addresses)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -2150,9 +2688,13 @@ console.log("post message sending text:",text)
         let cmdstr = 'DVCA'
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        let vcard_addrs = output.split('\n')
-        vcard_addrs.shift()
-        return(vcard_addrs)
+        if ( this.listing_follows(resp) ) {
+            let vcard_addrs = output.split('\n')
+            // vcard_addrs.shift()
+            return(vcard_addrs)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -2179,11 +2721,14 @@ console.log("post message sending text:",text)
         if ( headers_only === undefined ) headers_only = 0
         let cmdstr = `MSG0 ${msgnum}|${headers_only}` // 
         let resp =  await this.safe_client_write(cmdstr)
-        let msg_txt = this.handle_generic_response(resp)
-        if ( msg_txt ) {
-            let msg_lines = msg_txt.split('\n')
-            return message_to_object(msg_lines)
+        if ( this.listing_follows(resp) ) {
+            let msg_txt = this.handle_generic_response(resp)
+            if ( msg_txt ) {
+                let msg_lines = msg_txt.split('\n')
+                return this.message_to_object(msg_lines)
+            }
         }
+        this.add_error_string(this.handle_generic_response(resp))
         return false
     }
 
@@ -2198,12 +2743,16 @@ console.log("post message sending text:",text)
         if ( headers_only === undefined ) headers_only = 0
         let cmdstr = `MSG2 ${msgnum}|${headers_only}` // 
         let resp =  await this.safe_client_write(cmdstr)
-        let msg_txt = this.handle_generic_response(resp)
-        if ( msg_txt ) {
-            let msg_lines = msg_txt.split('\n')
-            // msg_lines should be parsed in order to get the header lines
-            return msg_lines
+        if ( this.listing_follows(resp) ) {
+            let msg_txt = this.handle_generic_response(resp)
+            if ( msg_txt ) {
+                let msg_lines = msg_txt.split('\n')
+                // MESSAGE PARSING
+                // msg_lines should be parsed in order to get the header lines
+                return msg_lines
+            }
         }
+        this.add_error_string(this.handle_generic_response(resp))
         return false
     }
 
@@ -2219,11 +2768,16 @@ console.log("post message sending text:",text)
         if ( section_token === undefined ) section_token = 0
         let cmdstr = `MSG4 ${msgnum}|${section_token}` // 
         let resp =  await this.safe_client_write(cmdstr)
-        let msg_txt = this.handle_generic_response(resp)
-        if ( msg_txt ) {
-            let msg_lines = msg_txt.split('\n')
-            return msg_lines
+        if ( this.listing_follows(resp) ) {
+            let msg_txt = this.handle_generic_response(resp)
+            if ( msg_txt ) {
+                let msg_lines = msg_txt.split('\n')
+                // MESSAGE PARSING
+                // msg_lines should be parsed in order to get the header lines
+                return msg_lines
+            }
         }
+        this.add_error_string(this.handle_generic_response(resp))
         return false
     }
 
@@ -2249,7 +2803,10 @@ console.log("post message sending text:",text)
         }
         let cmdstr = `MSGP ${format_prefs}`
         let resp =  await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        return false // should never happen
     }
 
 // "OPNA" : 48,
@@ -2272,6 +2829,10 @@ console.log("post message sending text:",text)
     /**
      * DLAT
      * 
+     * works like READ (almost the same except parameters)
+     * 
+     * BINARY_FOLLOWS
+     * 
      * -- 6XX length|-1|filename|content-type|charset
      * 
      * @param {number} msgnum 
@@ -2283,18 +2844,20 @@ console.log("post message sending text:",text)
         if ( !part ) return(-2)
         let cmdstr = `DLAT ${msgnum}|${part}`
         let resp = await this.safe_client_write(cmdstr)
-        let response = this.handle_generic_response(resp)
-        if ( response ) {
-            if ( response[0] === '6' ) {
-                let data = response.substring(4)
+        if ( this.binary_follows(resp) ) {
+            let data = this.handle_generic_response(resp)
+            if ( data ) {
+                // use_binary_switch
                 let [len, stat, filename, content_type, charset ] = data.split('|')
-                //
                 let buffer = await this.process_download_buffer(len)
                 return {buffer, len, stat, filename, content_type, charset}
             }
         }
+
+        this.add_error_string(this.handle_generic_response(resp))
         return false
     }
+
 
 
 
@@ -2341,32 +2904,33 @@ OK followed by a message number.
         }
         let resp = await this.safe_client_write(cmdstr)
         let data = this.handle_generic_response(resp)
-        if ( data ) {
-            if ( operation === "revert" ) {
-                data = data.split(" ")[1]
-                return {
-                    "msg_number" : data
-                }
-            } else if ( operation === "showrev" ) {
-                if ( data ) {
-                    // could add header info by parsing the lines
+        if ( this.response_is_good(resp) ) {
+            if ( data ) {
+                if ( operation === "revert" ) {
+                    data = data.split(" ")[1]
                     return {
-                        "msg_txt" : data
+                        "msg_number" : data
+                    }
+                } else if ( operation === "showrev" ) {
+                    if ( data ) {
+                        // could add header info by parsing the lines
+                        return {
+                            "msg_txt" : data
+                        }
                     }
                 }
-            } else {
-                let listings = data.split('\n')
-                if ( listings[0] === "LISTING_FOLLOWS" ) {
-                    listings.shift()
-                    let revs_info_list = listings.map((line) => {
-                        let parts = line.split('|')
-                        let [version, timestamp, editor] = parts
-                        return {version, timestamp, editor}
-                    })
-                    return revs_info_list
-                }
             }
+        } else if ( this.listing_follows(resp) ) {
+            let listings = data.split('\n')
+            let revs_info_list = listings.map((line) => {
+                let parts = line.split('|')
+                let [version, timestamp, editor] = parts
+                return {version, timestamp, editor}
+            })
+            return revs_info_list
         }
+        //
+        this.add_error_string(data)
         return false
     }
 
@@ -2386,10 +2950,14 @@ OK followed by a message number.
      */
     async list_floors() {
         let resp =  await this.safe_client_write("LFLR")
-        let output = this.handle_generic_response(resp)
-        let floors = output.split('\n')
-        floors.shift()
-        return(floors)
+        if ( this.listing_follows(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let floors = output.split('\n')
+            //floors.shift()
+            return(floors)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
     /**
@@ -2404,7 +2972,7 @@ OK followed by a message number.
         let cmdstr = `CFLR ${name}|${for_real ? 1 : 0}`
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             let floor_num = output.substring(2).trim()
             return { "floor" : name, "number" : floor_num }
         }
@@ -2424,7 +2992,7 @@ OK followed by a message number.
         let cmdstr = `KFLR ${floornum}|${for_real ? 1 : 0}`
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -2500,21 +3068,20 @@ OK followed by a message number.
         let cmdstr = by_type
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("LISTING_FOLLOWS") ) {
-            //
+        if ( this.listing_follows(resp) ) {
             let lines = output.split('\n')
-            lines.shift()
             let room_list = lines.map((line) => {
                 let line_parts = line.split('|')
                 let room = new RoomListElement(line_parts)
                 return room
             })
-            // 
             return room_list
         }
         this.add_error_string(output)
         return(false)
     }
+
+
 
     async list_all_known_rooms_with_new_messages() {
         return await this.list_rooms(`LKRN`)
@@ -2561,10 +3128,8 @@ OK followed by a message number.
         let cmdstr = 'RDIR'
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("LISTING_FOLLOWS") ) {
-            //
+        if ( this.listing_follows(resp ) ) {
             let lines = output.split('\n')
-            lines.shift()
             let dir_list = lines.map((line) => {
                 let line_parts = line.split('|')
                 let dir =  {
@@ -2576,7 +3141,6 @@ OK followed by a message number.
                 }
                 return dir
             })
-            // 
             return dir_list
         }
         this.add_error_string(output)
@@ -2591,17 +3155,13 @@ OK followed by a message number.
      */
     async get_room_attributes() {
         let resp =  await this.safe_client_write("GETR")
-        if ( resp.bucket === 2 ) {
+        if ( this.response_is_good(resp) ) {
             let output =  this.handle_generic_response(resp)
-            if ( output.startsWith("OK") ) {
-                let fields = output.split('|')
-                return new RoomDescriptor(fields)
-            } else {
-                this.add_error_string(output)
-                return(false)
-            }
+            let fields = output.split('|')
+            return new RoomDescriptor(fields)
         }
-        return resp.status
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -2616,8 +3176,11 @@ OK followed by a message number.
             cmdstr += `${roomDescr.QRflags}|${forget ? 1 : 0 }|${roomDescr.QRfloor}|${roomDescr.QRorder}|`
             cmdstr += `${roomDescr.QRdefaultview}|${roomDescr.QRflags2}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -2630,11 +3193,12 @@ OK followed by a message number.
         let cmdstr = "RINF"
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output && output.startsWith("LISTING_FOLLOWS" ) ) {
+        if ( this.listing_follows(resp) ) {
             let msg_lines = output.split('\n')
             return message_to_object(msg_lines)     // fix for MSG0
         }
-        return({ "error" : output.substring("error".length).trim() })
+        this.add_error_string(output)
+        return false
     }
 
 
@@ -2644,16 +3208,18 @@ OK followed by a message number.
 
     /**
      * // GETA : 65,
-     * @returns 
+     * 
+     * @returns {string|boolean}
      */
     async get_room_admin() {
         let cmdstr = "GETA"
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
-            return output.substring(2).trim()
+        if ( this.response_is_good(resp) ) {
+            return output  // room admin
         }
-        return({ "error" : output.substring("error".length).trim() })
+        this.add_error_string(output)
+        return false
     }
 
 
@@ -2666,7 +3232,7 @@ OK followed by a message number.
         let cmdstr = `SETA ${administator}`
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -2685,7 +3251,7 @@ OK followed by a message number.
         let cmdstr = 'KILL'
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -2721,7 +3287,7 @@ OK followed by a message number.
         try {
             let resp = await this.safe_client_write(cmdstr)
             let output = this.handle_generic_response(resp)
-            if ( output.startsWith("OK") ) {
+            if ( this.response_is_good(resp) ) {
                 return true
             }
             this.add_error_string(output)
@@ -2744,8 +3310,11 @@ OK followed by a message number.
     async createPasswordRoom(roomname,floor,password) {
         let cmd = `CRE8 1|${roomname}|3|${password}|${floor}`
         let resp =  await this.safe_client_write(cmd)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -2758,7 +3327,7 @@ OK followed by a message number.
         let cmdstr = "FORG"
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -2769,7 +3338,7 @@ OK followed by a message number.
 /**
  * 
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -2786,28 +3355,40 @@ OK followed by a message number.
 
     /**
      * // EINF
+     * 
+     * SEND_LISTING
+     * 
+     * 
      * @param {boolean} for_real 
      * @returns 
      */
-    async set_room_info(for_real) {
+    async set_room_info(for_real,listing_info) {
         let cmdstr = `EINF ${for_real ? '1' : '2'}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.send_listing(resp) ) {
+            await this.send_text(listing_info)
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
 
     /**
      * 
-     * @param {*} username 
+     * @param {string} username 
      * @returns 
      */
     async invite_user_to_room(username) {
         let cmdstr = "INVT " + username
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(output)
+        return(false)
     }
 
 
@@ -2818,9 +3399,8 @@ OK followed by a message number.
     async who_knows_room(all_q) {
         let resp =  all_q ? await this.safe_client_write("WHOK ALL") : await this.safe_client_write("WHOK")
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("LISTING_FOLLOWS") ) {
+        if ( this.listing_follows(resp) ) {
             let lines = output.split('\n')
-            lines.shift()
             if ( all_q ) {
                 return lines
             } else {
@@ -2844,11 +3424,10 @@ OK followed by a message number.
     async kickout_user_from_room(username) {
         let cmdstr = "KICK " + username
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
-        this.add_error_string(output)
+        this.add_error_string(this.handle_generic_response(resp))
         return(false)
     }
 
@@ -2874,6 +3453,7 @@ OK followed by a message number.
 
 
     /**
+     * // DELF : 74
      * 
      * @param {*} filename 
      * @returns 
@@ -2882,11 +3462,16 @@ OK followed by a message number.
         if (!filename) return -2;
         let cmdstr = `DELF ${filename}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
     /**
+     * 
+     * // MOVF : 75
      * 
      * @param {*} filename 
      * @param {*} destroom 
@@ -2897,27 +3482,41 @@ OK followed by a message number.
         if (!destroom) return -2;
         let cmdstr = `MOVF ${filename}|${destroom}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
+    // OPEN, CLOS, READ (download data)
     /**
      * 
      * OPEN : 76,
      * 
-     * @param {*} filename 
-     * @returns 
+     *
+```
+If the file is successfully opened, OK will be returned, along with the size (in
+bytes) of the file, the time of last modification (if applicable), the filename
+(if known), and the MIME type of the file (if known).
+```
+     * 
+     * @param {string} filename 
+     * @returns {boolean|object} -- The object will contain information necessary for obtaining the right sized data
      */
-    async file_download(filename) {
+    async file_download_open(filename) {
         if ( !filename ) return(-2)
         let cmdstr = `OPEN ${filename}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            this.process_download(resp)
+        if ( this.response_is_good(resp) ) {
+            let data = this.handle_generic_response(resp)
+            let [size,mod_time,filename,mime_type] = data.split('|')
+            return {size,mod_time,filename,mime_type}
         }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
-
 
     /**
      * 
@@ -2928,73 +3527,78 @@ OK followed by a message number.
         let cmdstr = `CLOS`
         let resp = await this.safe_client_write(cmdstr,false,true)
         this.downloading = false
-        return resp.status
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
+    
 
+    // sprintf(cret, "%d|%ld|%s|%s", (int) bytes, last_mod, filename, mimetype);
+    /**
+     * READ : 78
+     * 
+     *  -- do the binary write that others request -- OPEN, OIMG
+     * 
+     * process_download_buffer -- should be setup in the connect data handler
+     * 
+     * use_binary_switch  -- need to set this up
+     * 
+     * {size,mod_time,filename,mime_type}
+     * 
+     * @returns {object|false} -- if an object is returned, it will have a buffer field
+     */
 
+    /**
+     * 
+     * @param {number} offset 
+     * @param {number} size 
+     * @returns 
+     */
+    async process_download(offset,size) {
+        let cmdstr = `READ ${offset}|${size}`
+        let resp = await this.safe_client_write(cmdstr,false,true)
+        if ( this.binary_follows(resp) ) {
+            let numstr = this.handle_generic_response(resp)
+            let len = parseInt(numstr)
+            // use_binary_switch
+            let buffer = await this.process_download_buffer(len)
+            return {buffer,size}
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
+    }
+    // UOPN UCLS WRIT  (upload data)
+
+    // UOPN UCLS WRIT  (upload data)
 
     /**
      * 
      * UOPN : 79
      * 
-     * @param {*} save_as 
-     * @param {*} comment 
-     * @param {*} path 
-     * @returns 
+     * @param {string} save_as -- a file name
+     * @param {comment} comment -- about the file
+     * @param {string} path  -- the local file path
+     * @returns {Buffer|boolean}
      */
-    async file_upload(save_as,comment,path) {
+    async open_file_upload(save_as,comment,path) {
         if (!save_as) return -1;
         if (!comment) return -1;
         if (!path) return -1;
         let mimetype = this.approximate_mime_type(path)
         let filedata = this.read_file(path)
         if ( filedata ) {
-            this.lockWriter()
             let cmdstr = `UOPN ${save_as}|${mimetype}|${comment}`
             let resp = await this.safe_client_write(cmdstr,false,true)
-            //
-            if ( resp.bucket == 2 ) {
-                await this.binary_upload(filedata)
+            if ( this.response_is_good(resp) ) {
+                return file_data    // file read from disk here
             }
-            this.unlockWriter()
+            this.add_error_string(this.handle_generic_response(resp))
+            return false
         }
     }
-
-
-
-    // sprintf(cret, "%d|%ld|%s|%s", (int) bytes, last_mod, filename, mimetype);
-    /**
-     * 
-     * READ : 78,
-     * 
-     * @param {*} resp 
-     * @param {*} is_binary 
-     */
-    async process_download(resp,is_binary) {
-        this.downloading = true
-        this.binary_data = is_binary
-        let len = rep.response[0]
-        let last_mod = resp.response[1]
-        let mimetype = (resp.response[2].split('|'))[2]
-        this.lockWriter()
-        let offset = 0
-        while ( offset < len ) {
-            let amount = Math.min(4096,len - offset)
-            let cmdstr = `READ ${offset}|${amount}`
-            this.downloading = false
-            let part_resp = await this.safe_client_write(cmdstr,false,true)
-            this.downloading = true
-            if ( part_resp.bucket === 8 ) {   // ???
-                let ok = await this.data_ready(amount)
-            }
-        }
-        this.binary_data = !is_binary
-        this.end_download()
-        this.unlockWriter()
-       //
-    }
-
 
 
     /**
@@ -3005,7 +3609,11 @@ OK followed by a message number.
     async end_upload(discard) {
         let cmdstr = `UCLS ${discard ? 1 : 0}`
         let resp = await this.safe_client_write(cmdstr,false,true)
-        return resp.status
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
     //  //  //
 
@@ -3015,6 +3623,8 @@ OK followed by a message number.
     /**
      * // WRIT : 81
      * 
+     * SEND_BINARY  -- do the binary write that others request -- UOPN, UIMG
+     * 
      * @param {buffer} filedata 
      * @returns 
      */
@@ -3022,109 +3632,154 @@ OK followed by a message number.
         let dlen = filedata.length
         let offset = 0
         const writeBuf = Buffer.allocUnsafe(4096);
-        this.lockWriter()
         let status = false
         try {
             while ( offset < dlen ) {
                 let to_write = Math.min(4096,(dlen - offset))
-                let cmdstr = `WRIT ${to_write}`
+                let cmdstr = `WRIT ${to_write}`     // each time it sends more to the file open for upload
                 let resp = await this.safe_client_write(cmdstr,false,true)
-                if ( resp.bucket === 7 ) {
-                    to_write = parseInt(resp.response[2])
-                    filedata.copy(writeBuf,0,offset,offset + to_write)
+                if ( this.send_binary(resp) ) {
+                    let numstr = this.handle_generic_response(resp)
+                    to_write = parseInt(numstr)
+                    filedata.copy(writeBuf,0,offset,offset + to_write)  // copies to_write bytes starting at offset to the start of writeBuf
                     offset += to_write
-                    await this.binary_write(writeBuf)
+                    await this.binary_write(writeBuf,to_write)
                 }
             }
             status = true
         } catch (err) {
             //
         }
-        this.end_upload(status)
-        this.unlockWriter()
         //
         return status
     }
 
 
+    // UIMG OIMG WRIT  (upload data)
 
     /**
      * // UIMG : 82
      * 
-     * @param {*} for_real 
-     * @param {*} save_as 
-     * @param {*} path 
-     * @returns 
+     * after use WRIT
+     * 
+     * if for real and this returns file data, 
+     * then client should imediately call binary_upload(filedata) followed by end_upload(discard)
+     * binary_upload == WRIT
+     * 
+     * @param {boolean} for_real 
+     * @param {string} save_as -- storage name under server aegis
+     * @param {string} path -- local path to file
+     * @returns {Buffer|boolean}
      */
-    async image_upload(for_real,save_as,path) {
+    async open_image_upload(for_real,save_as,path) {
         if (!save_as) return -1;
         if (!path) return -1;
         let mimetype = this.approximate_mime_type(path)
-        let filedata = this.read_file(path)  // a buffer
-        this.lockWriter()
-        let cmdstr = `UIMG ${for_real}|${mimetype}|${save_as}`
-        let resp = await this.safe_client_write(cmdstr)
-        //
-        if ( resp.bucket == 2 ) {
-            let success = await this.binary_upload(filedata)
-            this.end_upload(success)
+        let filedata = for_real ? this.read_file(path) : false
+        if ( filedata ) {
+            let cmdstr = `UIMG 1|${mimetype}|${save_as}`
+            let resp = await this.safe_client_write(cmdstr,false,true)
+            if ( this.response_is_good(resp) ) {
+                return file_data    // file read from disk here
+            }
+            this.add_error_string(this.handle_generic_response(resp))
+            return false
+        } else if ( !for_real ) {
+            let cmdstr = `UIMG 0|${mimetype}|${save_as}`
+            let resp = await this.safe_client_write(cmdstr,false,true)
+            if ( this.response_is_good(resp) ) {
+                return true    // permission granted
+            }
+            this.add_error_string(this.handle_generic_response(resp))
+            return false
         }
-        this.unlockWriter()
+        this.add_error_string("image_upload: source file not found")
+        return false
     }
-
-
 
     /**
      * // OIMG : 83
-     * @param {*} filename 
+     * 
+     * Immediately after this returns true,
+     * the client code should call process_download(len) followed by end_download()
+     * 
+     * after user READ
+     * 
+     * @param {string} filename 
      * @returns 
      */
-    async image_download(filename) {
+    async open_image_download(filename) {
         if ( !filename ) return(-2)
         let cmdstr = `OIMG ${msgnum}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            this.process_download(resp,true)
+        if ( this.response_is_good(resp) ) {
+            let data = this.handle_generic_response(resp)
+            let [size,mod_time,filename,mime_type] = data.split('|')
+            return {size,mod_time,filename,mime_type}
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
+
 
     /**
      * DLRI : 84
+     * 
+     * (works like READ except for some parameters)
+     * 
+     * 
+     * BINARY_FOLLOWS
+     * use_binary_switch    
+```
+a BINARY_FOLLOWS code followed by three parameters - the
+number of bytes in the data, a filename (always empty), the MIME type of the
+image (such as image/gif), and the character set (always empty).
+```
      * @returns 
      */
-    async downLoad_room_image() {
+    async download_room_image() {
         let cmdstr = 'DLRI'
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            this.process_download(resp,true)
+        if ( this.binary_follows(resp) ) {
+            let data = this.handle_generic_response(resp)
+            if ( data ) {
+                // use_binary_switch
+                let [len, filename, content_type, charset ] = data.split('|')
+                let buffer = await this.process_download_buffer(len)
+                return {buffer, len, filename, content_type, charset}
+            }
         }
-        return(resp.status)
+        //
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
     /**
      * // ULRI : 85
-     * @param {*} image_size 
-     * @param {*} save_as 
-     * @param {*} path 
+     * 
+     * SEND_BINARY
+     * 
+     * @param {string} save_as 
+     * @param {string} path 
      * @returns 
      */
-    async room_image_upload(image_size,save_as,path) {
+    async room_image_upload(save_as,path) {
         if (!save_as) return -1;
-        if (!comment) return -1;
         if (!path) return -1;
         let mimetype = this.approximate_mime_type(path)
         let filedata = this.read_file(path)  // a buffer
-        this.lockWriter()
+        let image_size = filedata.length
         let cmdstr = `ULRI ${image_size}|${mimetype}|${save_as}`
         let resp = await this.safe_client_write(cmdstr)
-        //
-        if ( resp.bucket == 2 ) {
-            let success = await this.binary_upload(filedata)
-            this.end_upload(success)
+        if ( this.send_binary(resp) ) {
+            let numstr = this.handle_generic_response(resp)
+            let to_write = parseInt(numstr)
+            await this.binary_write(filedata,to_write)
+            return true
         }
-        this.unlockWriter()
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -3140,29 +3795,71 @@ OK followed by a message number.
     /**
      * 
      * // CONF : 86
-     * // CONF GET
+     * // CONF GET LISTVAL
+     * 
+```
+  CONF GETVAL|name
+  CONF PUTVAL|name|value
+  CONF LISTVAL
+  CONF GET
+  CONF SET
+  CONF GETSYS|name
+  CONF PUTSYS|name
+     * 
      * 
      * @returns 
      */
     async get_system_config() {
-        let cmdstr = `CONF GET`
+        let cmdstr = `CONF LISTVAL`
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
+        if ( this.listing_follows(resp) ) {
+            let output =  this.handle_generic_response(resp)
+            let name_val_pairs = output.split('\n')
+            let nv_map = {}
+            for ( let nv_pair of name_val_pairs ) {
+                let [name,value] = nv_pair.split('|')
+                nv_map[name] = value
+            }
+            return(nv_map)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
     /**
      * 
+     * CONF GETVAL|name
+     * 
+     * @param {string} var_name 
+     * @returns 
+     */
+    async get_system_conf_var(var_name) {
+        let cmdstr = `CONF GETVAL|${var_name}`
+        let resp = await this.safe_client_write(cmdstr)
+        if ( this.response_is_good(resp) ) {
+            let output =  this.handle_generic_response(resp)
+            return(output)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
+    }
+
+
+
+    /**
+     * 
+     * // CONF PUTVAL|name|value
      * @param {string} listing 
      * @returns 
      */
-    async set_system_config(listing) {
-        let cmdstr = `CONF SET`
+    async set_system_conf_var(name,value) {
+        let cmdstr = `CONF PUTVAL|${name}|${value}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
-            this.send_text(listing)
+        if ( this.response_is_good(resp) ) {
+            return true
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -3175,12 +3872,16 @@ OK followed by a message number.
      * @param {string} listing 
      * @returns 
      */
-    async get_system_config_by_type(mimetype,listing) {
+    async get_system_config_by_type(mimetype) {
         if ( !mimetype ) return -2;
         let cmdstr = `CONF GETSYS|${mimetype}`
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
+        if ( this.listing_follows(resp) ) {
+            let output =  this.handle_generic_response(resp)
+            return(output)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
     // 
@@ -3189,14 +3890,20 @@ OK followed by a message number.
      * // CONF : 86
      * // CONF PUTSYS
      * 
+     * 
+     * 
      * @param {string} mimetype 
      * @returns 
      */
-    async set_system_config_by_type(mimetype) {
+    async set_system_config_by_type(mimetype,listing) {
         let cmdstr = `CONF PUTSYS|${mimetype}`
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
+        if ( this.send_listing(resp) ) {
+            this.send_text(listing)
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -3211,7 +3918,9 @@ OK followed by a message number.
     /**
      * // GPEX : 87
      * 
-     * @param {*} which 
+     * which policy is one of: "roompolicy" "floorpolicy" "sitepolicy" "mailboxespolicy"
+     * 
+     * @param {string} which 
      * @returns 
      */
     async get_message_expiration_policy(which) {
@@ -3219,26 +3928,34 @@ OK followed by a message number.
         let policy = this.expiration_policies[which]
         let cmdstr = `GPEX ${policy}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            return new ExpirationPolicy(resp.response[0],resp.response[1])
+        if ( this.response_is_good(resp) ) {
+            let p_resp = this.handle_generic_response(resp).split('|')
+            return new ExpirationPolicy(p_resp[0],p_resp[1])
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
+
     }
 
     /**
      * // SPEX : 88
      * 
-     * @param {*} which 
-     * @param {*} policy 
+     * `SPEX ${scope}|${policy.expire_mode}|${policy.expire_mode}`
+     * 
+     * @param {string} which - one of  "room" "floor" "site" "mailboxes"
+     * @param {string} policy -- one of "roompolicy" "floorpolicy" "sitepolicy" "mailboxespolicy"
      * @returns 
      */
     async set_message_expiration_policy(which,policy) {
-        if ( (which < 0) || (which > 3) ) return -2;
-        let scope = this.policy_scope[which]
-        let cmdstr = `SPEX ${scope}|${policy.expire_mode}|${policy.expire_mode}`
+        let scope_settings = this.policy_scope[which]   // policy_scope table initialized
+        let value = scope_settings[which][policy]
+        let cmdstr = `SPEX ${which}|${policy}|${value}`  
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -3252,8 +3969,11 @@ OK followed by a message number.
     async initiate_auto_purger() {
         let cmdstr = 'TDAP'
         let resp = await this.safe_client_write(cmdstr)
-        this.send_text(bio)
-        return(resp.status)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
     
 
@@ -3280,7 +4000,7 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         let cmdstr = cmd === 'mx' ? `SMTP mx|${hostname}` : "SMTP runqueue"
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -3301,7 +4021,7 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         let cmdstr = 'DOWN'
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -3321,7 +4041,7 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         let cmdstr = `SCDN ${mode ? 1 : 0}`
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -3341,7 +4061,7 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         let cmdstr = 'HALT'
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("OK") ) {
+        if ( this.response_is_good(resp) ) {
             return true
         }
         this.add_error_string(output)
@@ -3371,7 +4091,11 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
             let cmdstr = "NEWU " + username
             let resp =  await this.safe_client_write(cmdstr)
             await this.set_password(pass)
-            return(resp.response)
+            if ( this.response_is_good(resp) ) {
+                return true
+            }
+            this.add_error_string(output)
+            return(false)
         } catch ( e ) {
             console.log("create user: " + e.message)
             return(false)
@@ -3388,8 +4112,11 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         try {
             let cmdstr = "CREU " + username
             let resp = await this.safe_client_write(cmdstr)
-            let output = this.handle_generic_response(resp)
-            return(output)
+            if ( this.response_is_good(resp) ) {
+                return true
+            }
+            this.add_error_string(this.handle_generic_response(resp))
+            return(false)
         } catch ( e ) {
             console.log("admin create user: " + e.message)
             return(false)
@@ -3410,8 +4137,11 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         //
         let cmdstr = `VALI ${username}|${axlevel}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -3424,8 +4154,11 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async query_username(username) {
         let cmdstr = 'QUSR ' + username
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return this.handle_generic_response(resp)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -3434,13 +4167,31 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
      * LIST" : 98
      * //   "LIST": "List users"
      * 
+     * 
+- User display name
+- Access level
+- User number
+- Date/time of last login (Unix timestamp format)
+- (empty field)
+- (empty field)
+- Password (listed only if the user requesting the list is an administrator)
+     * 
      * @returns 
      */
     async list_users(search_pattern) {
         let cmdstr = `LIST ${search_pattern}`
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.listing_follows(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let listing = output.split('\n')
+            let user_lists = listing.map(line => {
+                let [display_name, access, user_num, datetime, not1, not2, password] = line.split('|')
+                return {display_name, access, user_num, datetime, password}
+            })
+            return user_lists
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
  
 
@@ -3466,8 +4217,11 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async set_password(pass) {
         let cmdstr = "SETP " + pass
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
     /**
@@ -3478,9 +4232,13 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async get_user_parameters() {
         try {
             let resp =  await this.safe_client_write("GETU ")
-            let output = this.handle_generic_response(resp)
-            let report = this.unpack_user_parameters(output)
-            return(report)
+            if ( this.response_is_good(resp) ) {
+                let output = this.handle_generic_response(resp)
+                let report = this.unpack_user_parameters(output)
+                return(report)
+            }
+            this.add_error_string(this.handle_generic_response(resp))
+            return(false)
         } catch (e) {
             return false
         }
@@ -3496,8 +4254,11 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async set_user_parameters(params) {
         let cmdstr = `SETU ${params}`
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
  
 
@@ -3506,6 +4267,9 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     /**
      * // EBIO : 102
      * 
+     * 
+     * SEND_LISTING
+     * 
      * @param {string} bio 
      * @returns 
      */
@@ -3513,10 +4277,12 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         if ( !bio ) return -2;
         let cmdstr = 'EBIO'
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
+        if ( this.send_listing(resp) ) {
             this.send_text(bio)
+            return true
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -3532,11 +4298,9 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         let cmdstr = `RBIO ${username}`
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
-        if ( output.startsWith("LISTING_FOLLOWS") ) {
-            //
+        if ( this.listing_follows(resp) ) {
             let lines = output.split('\n')
-            lines.shift()
-            // 
+            // something goes in this line
             return lines.join('\n')
         }
         this.add_error_string(output)
@@ -3544,18 +4308,36 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     }
 
 
+
     /**
      * // DLUI : 104
      * 
+     * (works like READ)
+     * 
+     * BINARY_FOLLOWS
+     * 
+```
+a BINARY_FOLLOWS code followed by three
+parameters - the number of bytes in the data, a filename (always empty), the
+Content-Type (such as image/gif), and the character set (always empty).
+```
+     * 
      * @returns 
      */
-    async downLoad_user_image(user_name) {
+    async download_user_image(user_name) {
         let cmdstr = `DLUI ${user_name}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket == 2 ) {
-            this.process_download(resp,true)
+        if ( this.binary_follows(resp) ) {
+            let data = this.handle_generic_response(resp)
+            if ( data ) {
+                // use_binary_switch
+                let [len, stat, filename, content_type, charset ] = data.split('|')
+                let buffer = await this.process_download_buffer(len)
+                return {buffer, len, stat, filename, content_type, charset}
+            }
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -3563,27 +4345,31 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     /**
      * // ULUI : 105
      * 
+     * SEND_BINARY
+     * 
+     * (send binary allows more control outside the data handler for connect)
+     * 
      * 
      * @param {*} image_size 
      * @param {*} user_name 
      * @param {*} path 
      * @returns 
      */
-    async user_image_upload(image_size,save_as,path) {
+    async upload_user_image(save_as,path) {
         if (!save_as) return -1;
-        if (!comment) return -1;
         if (!path) return -1;
         let mimetype = this.approximate_mime_type(path)
         let filedata = this.read_file(path)  // a buffer
-        this.lockWriter()
+        let image_size = filedata.length
         let cmdstr = `ULUI ${image_size}|${mimetype}|${user_name}`
         let resp = await this.safe_client_write(cmdstr)
-        //
-        if ( resp.bucket == 2 ) {
-            let success = await this.binary_upload(filedata)
-            this.end_upload(success)
+        if ( this.send_binary(resp) ) {
+            let numstr = this.handle_generic_response(resp)
+            let to_write = parseInt(numstr)
+            await this.binary_write(filedata,to_write)
         }
-        this.unlockWriter()
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -3591,7 +4377,6 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
 //   "ASUP" : 107,
 //   "AGEA" : 108,
 //   "ASEA" : 109,
-
 
     /**
      * 
@@ -3608,18 +4393,19 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         8	Purge time (in days) for this user (or 0 to use system default)
      * 
      * 
-     * @param {*} who 
+     * @param {string} who 
      * @returns 
      */
     async aide_get_user_parameters(who) {
         let cmdstr = `AGUP ${who}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 2 ) {
+        if ( this.response_is_good(resp) ) {
             let output =  this.handle_generic_response(resp)
             let fields = output.split('|')
             return new CitadelAideUser(fields)
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
     /**
@@ -3634,8 +4420,13 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
             cmdstr += `${cit_user.timescalled}|${cit_user.posted}|${cit_user.axlevel}|${cit_user.usernum}|`
             cmdstr += `${cit_user.lastcall}|${cit_user.lastcall}`        
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            let output =  this.handle_generic_response(resp)
+            let fields = output.split('|')
+            return new CitadelAideUser(fields)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
     /**
@@ -3648,17 +4439,21 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async aide_get_email_addresses(who) {
         let cmdstr = `AGEA ${who}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 1 ) {
+        if ( this.listing_follows(resp) ) {
             let output =  this.handle_generic_response(resp)
-            return(output)
+            let emails = output.split('|')
+            return(emails)
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
     
 
 
     /**
      * // ASEA : 109
+     * 
+     * SEND_LISTING
      * 
      * @param {*} who 
      * @param {*} emailaddrs 
@@ -3669,10 +4464,12 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         if ( !emailaddrs ) return -2;
         let cmdstr = `ASEA ${who}`
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
+        if ( this.send_listing(resp) ) {
             this.send_text(emailaddrs)
+            return true
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -3694,8 +4491,11 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         if (!newname) return -2;
         let cmdstr = `RENU ${oldname}|${newname}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -3704,13 +4504,21 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
      * 
      * // GNUR : 111
      * 
-     * @returns 
+     * MORE_DATA
+     * 
+     * @returns {boolean|string} -- if a string returned is the name of user requiring validation
      */
     async unvalidated_user() {
         let cmdstr = "GNUR"
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        } else if ( this.more_data(resp) ) {
+            let output = this.handle_generic_response(resp)
+            return(output)
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -3718,7 +4526,22 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     /**
      * // GREG" : 112
      * 
-     * @param {*} username 
+```
+RVcard
+1	User number
+2	Password
+3	Real name
+4	Street address or PO Box
+5	City/town/village/etc.
+6	State/province/etc.
+7	ZIP or Postal Code
+8	Telephone number
+9	Access level
+10	Internet e-mail address
+11	Country
+```
+     * 
+     * @param {string} username 
      * @returns 
      */
     async user_registration(username) {
@@ -3727,22 +4550,38 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
             cmdstr = "GREG " + username
         }
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.listing_follows(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let reg_values = output.split('\n')
+            return(new RVcard(reg_values))
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
     /**
      * // REGI : 113
      * 
+     * SEND_LISTING
+     * (deprepcated)
      * 
+     * submit the following as a vCard (with MIME type "text/x-vcard") to the user's "My Citadel Config" room
+     * 
+1	Real name
+2	Street address or PO Box
+3	City/town/village/etc.
+4	State/province/etc.
+5	ZIP or postal code
+6	Telephone number
+7	email address
+8	Country
+
      * @returns 
      */
     async set_registration() {
         let cmdstr = 'REGI'
-        let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        return "deprecated"
     }
 
 
@@ -3756,8 +4595,12 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async misc_check() {
         let cmdstr = 'CHEK'
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let [ new_msg_count, register, user_validation, prefered_email ] = output.split('|')
+            return {new_msg_count, register, user_validation, prefered_email}
+        }
+        this.add_error_string(this.handle_generic_response(resp))
     }
 
 
@@ -3773,8 +4616,10 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async stealth_mode(mode) {
         let cmdstr = `STEL ${mode}`
         let resp = await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
     }
 
 
@@ -3794,20 +4639,34 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
         // RCHT send
         // RCHT poll[|newer_than]
         // RCHT rwho    
+     *
+     * 
+     *  SEND_LISTING
+     * 
      * @param {string} cmd_str 
      * @param {string} cmd_pars - optional
      * @returns 
      */
-    async real_time_chat(cmd_str,cmd_pars = false) {
+    async real_time_chat(cmd_str,cmd_pars = false,listing = "") {
         let cmdstr = `RCHT ${cmd_str}`
         if ( cmd_pars ) {
             cmdstr += `|${cmd_pars}`
         }
         let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
+        if ( this.response_is_good(resp) ) {
+            return true
+        } else if ( this.send_listing(resp) ) {
+            this.send_text(listing)
+            return true
+        } else if ( this.listing_follows(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let lines = output.split('\n')
+            return lines.join('\n')
+        }
+
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
-
-
 
 
     // THE FOLLOWING COMMANDS ARE NOT FOUND IN THE DOC PAGE
@@ -3841,16 +4700,22 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
 
     /**
      * 
-     * @param {*} session 
+     * @param {string} session 
+     * @param {string} listing 
      * @returns 
      */
-    async set_room_network_config(session) {
+    async set_room_network_config(session,listing) {
         if ( session < 0 ) return -2;
         let cmdstr = `SNET`
         let resp = await this.safe_client_write(cmdstr)
-        this.send_text(listing)
-        return(resp.status)
+        if ( this.send_listing(resp) ) {
+            this.send_text(listing)
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
+    
 
     /**
      * 
@@ -3886,10 +4751,12 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async list_users_with_bios() {
         let cmdstr = 'LBIO'
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.bucket === 4 ) {
-            this.send_text(text)
+        if ( this.send_listing(resp) ) {
+            this.send_text(listing)
+            return true
         }
-        return(resp.status)
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -3945,9 +4812,12 @@ SMTP runqueue		(attempt immediate delivery of all messages in the outbound
     async put_inbox_rules(new_rules) {
         let cmdstr = 'PIBR'
         let resp = await this.safe_client_write(cmdstr)
-        if ( resp.status ) {
+        if ( this.send_listing(resp) ) {
             await this.send_text(new_rules)
+            return true
         }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
