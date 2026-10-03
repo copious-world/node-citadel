@@ -3,7 +3,7 @@
 const net = require('net')
 const fs = require('fs')
 const mime = require('mime/lite')
-const strict = require('assert/strict')
+const { cat } = require('../alphas/copious-transition-apps/captcha-igid-merged/lib/third-party-db/general_media_types')
 //
 
 
@@ -595,7 +595,7 @@ const error_result_code_map = {
     "31"	: "SERVER_SHUTTING_DOWN",   // A command failed because the server is in the process of shutting down.
     "40"	: "PASSWORD_REQUIRED",      // A command failed because a password is required.
     "41"	: "ALREADY_LOGGED_IN",      // Authentication failed because a user is already logged in.
-    "42"	: "USERNAME_REQUIRED",      // The client attempted to perform an operation which requires the of a user name.
+    "42"	: "USERNAME_REQUIRED",      // The client attempted to petestsrform an operation which requires the of a user name.
     "50"	: "HIGHER_ACCESS_REQUIRED",	// The client attempted to perform an operation which requires administrator privileges.
     "51"	: "MAX_SESSIONS_EXCEEDED",  // A login attempt failed because the server is operating at its maximum number of connected sessions.
     "52"	: "RESOURCE_BUSY",	        // The client attempted to perform an operation on a locked resource.
@@ -661,6 +661,8 @@ class ClientOPs {
         this.binary_chunks = []
         this.binary_chunks_total_length = 0
         this.binary_chunks_expected_length = 0
+        //
+        this.binary_ready_promise = false
         //
         this.download_promise = null
         this.failed_data = null
@@ -728,6 +730,7 @@ class ClientOPs {
             output = output.join(' ')   // putting the line back together after taking the numbers off
             return(output)
         } else {
+            if ( typeof resp === "string" ) return `error:: ${resp}`
             return false
         }
     }
@@ -740,8 +743,8 @@ class ClientOPs {
      * @param {number} expected_bucket 
      * @returns 
      */
-    response_is_good(resp,expected_bucket = 2) {
-        if ( resp.bucket === expected_bucket ) {
+    response_is_good(resp,expected_bucket = OK) {
+        if ( resp && (resp.bucket === expected_bucket) ) {
             return true
         }
         return false
@@ -840,8 +843,8 @@ class ClientOPs {
 
     /**
      * 
-     * @param {*} restart_agent 
-     * @returns 
+     * @param {object} restart_agent 
+     * @returns {Promise} -- the caller awaits the connection before trying to send messages
      */
     connect(restart_agent) {
         //
@@ -895,14 +898,12 @@ class ClientOPs {
                         this.binary = true      // going to read it in any case, even if the app cannot handle it
                         this.downloading = true
                         if ( data_resolution.use_binary_switch && (typeof data_resolution.use_binary_switch === 'function') ) {
-                            let return_cmd = resp.join(' ').trim()
-                            // process the directive before this handler release to the event queue
-                            if ( data_resolution.use_binary_switch(return_cmd) ) {
-                                return  // the usual state of affairs is below, string data will be returned 
-                            }
+                            // process the directive before this handler releases to the event queue
+                            data_resolution.use_binary_switch(resp)         // setup the method's unique data handling that informs the binary download
+                            // now let the waiting method get its data, but wait for promises. data_ready (which should be determined by the last call)
                         }
                     }
-                    if ( data_resolution.resolver ) {
+                    if ( data_resolution.resolver ) {  // the call to safe_write will return
                         data_resolution.resolver({ 'status' : status, 'bucket' : bucket, 'response' : resp })
                     }
                 }
@@ -1028,13 +1029,21 @@ class ClientOPs {
     }
 
 
+    /**
+     * 
+     * @param {string} cmdstr 
+     * @param {boolean} useDelay 
+     * @param {boolean} privileged 
+     * @param {boolean} use_binary_switch 
+     * @returns {object|string} -- if no error, then a response objects, else if error then an error object
+     */
     async safe_client_write(cmdstr,useDelay,privileged,use_binary_switch) {
         try {
-            let resp =  await this.clientWrite(cmdstr,useDelay,privileged,use_binary_switch)
+            let resp = await this.clientWrite(cmdstr,useDelay,privileged,use_binary_switch)
             return resp
         } catch ( e ) {
             console.log("safe_client_write: " + e.message)
-            return(false)
+            return( { "message" : e.message, "bucket" : ERROR })
         }
     }
 
@@ -1113,8 +1122,7 @@ class ClientOPs {
      * 
      * use_binary_switch
      * 
-     * @param {*} resp 
-     * @param {*} is_binary 
+     * @param {number} len -- this is the length of the expected buffer in bytes.
      */
     async process_download_buffer(len) {
         this.binary_data = true
@@ -1134,6 +1142,43 @@ class ClientOPs {
         }
         return false
        //
+    }
+
+
+    async setup_binary_promise(data_waiter,len) {
+        this.binary_chunks = []
+        this.binary_chunks_total_length = 0
+        this.binary_chunks_expected_length = len
+        data_waiter.binary_ready_promise = new Promise((resolve,reject) => {
+            this.free_download = false
+            this.download_promise = (data) => {
+                resolve(data)
+            }
+            this.failed_data = (data) => {
+                reject(false)
+            }
+        })
+    }
+
+    async process_download_binary() {
+        if ( this.binary_ready_promise ) {
+            let buffer = false
+            try {
+                buffer = await this.binary_ready_promise
+            } catch (e) {
+                this.add_error_string(e.message)
+            }
+            this.binary_data = false
+            this.downloading = false
+            this.binary_ready_promise = false
+            //
+            this.binary_chunks_expected_length = 0
+            this.binary_chunks = []
+            this.binary_chunks_total_length = 0
+            //
+            return buffer
+        }
+        return false
     }
 
 
@@ -1184,7 +1229,6 @@ class ClientOPs {
         let p = new Promise((resolve,reject) => {
             this.client.write(`${text}\n000\n`,async (err) => {
                 this.uploading = false
-                this.unlockWriter()
                 if ( !err ) {
                     let data = await this.data_lines_ready()
                     resolve(data)
@@ -1311,26 +1355,30 @@ class CitadelClient extends ClientOPs {
         let cmdstr = `${room_type_symbol} ${floor}`
         //
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        //
-        if ( output ) {
-            let rlist = output.split('\n')
-            let rrecords = rlist.map((rline) => {
-                let rdata = rline.split('|')
-                let name = rdata.shift()
-                return({ 'name' : name, room_type: rt, 'rest' : rdata.join('|') })
-            })
+        if ( this.listing_follows(resp) ) {
+            let output = this.handle_generic_response(resp)
             //
-            let rt_str = this.room_type_to_string(rt)
-            this.roomMap[rt_str] = {}
-            rrecords.forEach((rec) => {
-                if ( rec.name === 'Known rooms:' ) return;
-                if ( rec.name === '000' ) return;
-                this.roomMap[rt_str][rec.name] = rec
-            })
-    
-            return(this.roomMap[rt_str])    
+            if ( output ) {
+                let rlist = output.split('\n')
+                let rrecords = rlist.map((rline) => {
+                    let rdata = rline.split('|')
+                    let name = rdata.shift()
+                    return({ 'name' : name, room_type: rt, 'rest' : rdata.join('|') })
+                })
+                //
+                let rt_str = this.room_type_to_string(rt)
+                this.roomMap[rt_str] = {}
+                rrecords.forEach((rec) => {
+                    if ( rec.name === 'Known rooms:' ) return;
+                    if ( rec.name === '000' ) return;
+                    this.roomMap[rt_str][rec.name] = rec
+                })
+        
+                return(this.roomMap[rt_str])    
+            }
+
         }
+        this.add_error_string(this.handle_generic_response(resp))
         return(false)
     }
 
@@ -1348,8 +1396,9 @@ class CitadelClient extends ClientOPs {
      * @returns 
      */
     async noop() {
-        let resp =  await this.safe_client_write("NOOP")
-        return this.handle_generic_response(resp)
+        await this.safe_client_write("NOOP")
+        // always returns OK
+        return true
     }
 
 
@@ -1377,7 +1426,10 @@ class CitadelClient extends ClientOPs {
      */
     async echo(str) {
         let resp =  await this.safe_client_write("ECHO " + str)
-        return this.handle_generic_response(resp)
+        if ( this.response_is_good(resp) ) {
+            return this.handle_generic_response(resp)
+        }
+        return false
     }
 
 
@@ -1389,7 +1441,13 @@ class CitadelClient extends ClientOPs {
      */
     async server_time() {
         let resp = await this.safe_client_write("TIME")
-        return this.handle_generic_response(resp)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            let [ current_time, server_time, daylight, timestamp ] = output.split('|')
+            return { current_time, server_time, daylight, timestamp }
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 //   "MESG" : 5,
@@ -1414,15 +1472,25 @@ class CitadelClient extends ClientOPs {
                             user list entries.
      * 
      * 
-     * @param {string} message 
+     * @param {string} message_file 
      * @returns {string}
      */
-    async system_message(message) {
-        let cmdstr = "MESG " + message
+    async system_message(message_file) {
+        let cmdstr = `MESG ${message_file}`
         try {
             let resp = await this.safe_client_write(cmdstr)
-            let output = this.handle_generic_response(resp)
-            return(output)
+            if ( this.response_is_good(resp) ) {
+                let output = this.handle_generic_response(resp)
+                let lines = output.split('\n')
+                let msg_map = {}
+                for ( let line of lines ) {
+                    let [ky,msg] = line.split('|')
+                    msg_map[ky] = msg
+                }
+                return msg_map
+            }
+            this.add_error_string(this.handle_generic_response(resp))
+            return(false)
         } catch (e) {
             return("system message not found")
         }
@@ -1442,10 +1510,10 @@ class CitadelClient extends ClientOPs {
     async user(uname) {
         let cmdstr = "USER " + uname
         let resp =  await this.safe_client_write(cmdstr)
-        let output = this.handle_generic_response(resp)
-        if ( output === `Password required for ${uname}` ) {
+        if ( this.more_data(resp) ) {
             return true
         }
+        this.add_error_string(this.handle_generic_response(resp))
         return(false)
     }
 
@@ -1472,12 +1540,13 @@ class CitadelClient extends ClientOPs {
     async password(pass) {
         let cmdstr = "PASS " + pass
         let resp =  await this.safe_client_write(cmdstr)
-        if ( resp ) {
+        if ( this.response_is_good(resp) ) {
             let output = this.handle_generic_response(resp)
             let user_info = output.split('|')
             let user = new CitadelUser(user_info)
             return user
         }
+        this.add_error_string(this.handle_generic_response(resp))
         return(false)
     }
 
@@ -1489,8 +1558,9 @@ class CitadelClient extends ClientOPs {
      */
     async logout() {
         let resp =  await this.safe_client_write("LOUT")
-        let output = this.handle_generic_response(resp)
-        if ( output === "OK" ) return true
+        if ( this.response_is_good(resp) ) {
+            return true
+        }
         return(false)
     }
 
@@ -1527,6 +1597,8 @@ class CitadelClient extends ClientOPs {
 
 
     /**
+     * Called by the application program after getting the jwt_string from generate_JWT
+     * This is for inspection... otherwise,send the string to authenticate_JWT
      * 
      * @param {string} jwt_string 
      * @returns 
@@ -1854,7 +1926,8 @@ class CitadelClient extends ClientOPs {
                 return new CitadelServerInfo(info_list)
             }
         }
-        return false
+        this.add_error_string(this.handle_generic_response(resp))
+        return(false)
     }
 
 
@@ -2278,6 +2351,9 @@ class CitadelClient extends ClientOPs {
                     return false
                 }
             }
+        } else {
+            this.add_error_string(this.handle_generic_response(resp))
+            return false
         }
         return(messages)
     }
@@ -2542,7 +2618,8 @@ class CitadelClient extends ClientOPs {
             this.send_text(text)
             return true
         }
-        return(false)
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -2843,17 +2920,21 @@ class CitadelClient extends ClientOPs {
         if ( !msgnum ) return(-2)
         if ( !part ) return(-2)
         let cmdstr = `DLAT ${msgnum}|${part}`
-        let resp = await this.safe_client_write(cmdstr)
+        let data_waiter = this
+        let use_binary_switch = (resp) => {
+            let [numstr, stat, filename, content_type, charset ] = resp.split('|')
+            let len = parseInt(numstr)
+            this.setup_binary_promise(data_waiter,len)
+        }
+        let resp = await this.safe_client_write(cmdstr,false,false,use_binary_switch)
         if ( this.binary_follows(resp) ) {
             let data = this.handle_generic_response(resp)
             if ( data ) {
-                // use_binary_switch
                 let [len, stat, filename, content_type, charset ] = data.split('|')
-                let buffer = await this.process_download_buffer(len)
+                let buffer = await this.process_download_binary()
                 return {buffer, len, stat, filename, content_type, charset}
             }
         }
-
         this.add_error_string(this.handle_generic_response(resp))
         return false
     }
@@ -3059,12 +3140,14 @@ OK followed by a message number.
 
     /**
      * // LKRN
+     * // and LKRO, LZRM, LKRA, LRMS, LPRM
      * 
-     * @param {number} floornum 
-     * @param {string} floorname 
+     * This call is generic call to be wrapped 
+     * 
+     * @param {by_type} floornum 
      * @returns {object}
      */
-    async list_rooms(by_type) {
+    async #list_rooms(by_type) {
         let cmdstr = by_type
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
@@ -3084,28 +3167,28 @@ OK followed by a message number.
 
 
     async list_all_known_rooms_with_new_messages() {
-        return await this.list_rooms(`LKRN`)
+        return await this.#list_rooms(`LKRN`)
     }
 
     async list_all_rooms_with_old_messages() {
-        return await this.list_rooms(`LKRO`)
+        return await this.#list_rooms(`LKRO`)
     }
 
     async list_all_zapped_rooms() {
-        return await this.list_rooms(`LZRM`)
+        return await this.#list_rooms(`LZRM`)
     }
 
     async list_all_known_rooms() {
-        return await this.list_rooms(`LKRA`)
+        return await this.#list_rooms(`LKRA`)
     }
 
     async list_all_accessible_rooms() {
-        return await this.list_rooms(`LRMS`)
+        return await this.#list_rooms(`LRMS`)
     }
 
 //   "LPRM" : 60,
     async list_all_public_rooms() {
-        return await this.list_rooms(`LPRM`)
+        return await this.#list_rooms(`LPRM`)
     }
     
 
@@ -3559,17 +3642,23 @@ bytes) of the file, the time of last modification (if applicable), the filename
      */
     async process_download(offset,size) {
         let cmdstr = `READ ${offset}|${size}`
-        let resp = await this.safe_client_write(cmdstr,false,true)
+        let data_waiter = this
+        let use_binary_switch = (resp) => {
+            let numstr = resp
+            let len = parseInt(numstr)
+            this.setup_binary_promise(data_waiter,len)
+        }
+        let resp = await this.safe_client_write(cmdstr,false,false,use_binary_switch)
         if ( this.binary_follows(resp) ) {
             let numstr = this.handle_generic_response(resp)
             let len = parseInt(numstr)
-            // use_binary_switch
-            let buffer = await this.process_download_buffer(len)
+            let buffer = await this.process_download_binary(len)
             return {buffer,size}
         }
         this.add_error_string(this.handle_generic_response(resp))
         return(false)
     }
+
     // UOPN UCLS WRIT  (upload data)
 
     // UOPN UCLS WRIT  (upload data)
@@ -3739,13 +3828,18 @@ image (such as image/gif), and the character set (always empty).
      */
     async download_room_image() {
         let cmdstr = 'DLRI'
-        let resp = await this.safe_client_write(cmdstr)
+        let data_waiter = this
+        let use_binary_switch = (resp) => {
+            let [numstr, filename, content_type, charset ] = resp.split('|')
+            let len = parseInt(numstr)
+            this.setup_binary_promise(data_waiter,len)
+        }
+        let resp = await this.safe_client_write(cmdstr,false,false,use_binary_switch)
         if ( this.binary_follows(resp) ) {
             let data = this.handle_generic_response(resp)
             if ( data ) {
-                // use_binary_switch
                 let [len, filename, content_type, charset ] = data.split('|')
-                let buffer = await this.process_download_buffer(len)
+                let buffer = await this.process_download_binary()
                 return {buffer, len, filename, content_type, charset}
             }
         }
@@ -3781,9 +3875,6 @@ image (such as image/gif), and the character set (always empty).
         this.add_error_string(this.handle_generic_response(resp))
         return false
     }
-
-
-
 
     
     // Commands that change the behavior of this Citadel System
@@ -4326,20 +4417,24 @@ Content-Type (such as image/gif), and the character set (always empty).
      */
     async download_user_image(user_name) {
         let cmdstr = `DLUI ${user_name}`
-        let resp = await this.safe_client_write(cmdstr)
+        let data_waiter = this
+        let use_binary_switch = (resp) => {
+            let [numstr, filename, content_type, charset ] = resp.split('|')
+            let len = parseInt(numstr)
+            this.setup_binary_promise(data_waiter,len)
+        }
+        let resp = await this.safe_client_write(cmdstr,false,false,use_binary_switch)
         if ( this.binary_follows(resp) ) {
             let data = this.handle_generic_response(resp)
             if ( data ) {
-                // use_binary_switch
                 let [len, stat, filename, content_type, charset ] = data.split('|')
-                let buffer = await this.process_download_buffer(len)
+                let buffer = await this.process_download_binary()
                 return {buffer, len, stat, filename, content_type, charset}
             }
         }
         this.add_error_string(this.handle_generic_response(resp))
         return false
     }
-
 
 
     /**
@@ -4719,16 +4814,20 @@ RVcard
 
     /**
      * 
-     * @param {*} msgnum 
-     * @param {*} seen 
+     * @param {number} msgnum 
+     * @param {boolean} seen 
      * @returns 
      */
     async set_message_seen(msgnum,seen) {
         if ( msgnum < 0 ) return -2;
         let cmdstr = `SEEN ${msgnum}|${seen}`
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            return output   // ?? have to go through code to see what this is
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
     /**
@@ -4739,8 +4838,12 @@ RVcard
     async internal_program(secret) {
         let cmdstr = `IPGM ${secret}`
         let resp = await this.safe_client_write(cmdstr)
-        let output =  this.handle_generic_response(resp)
-        return(output)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            return output   // ?? have to go through code to see what this is
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -4774,7 +4877,12 @@ RVcard
     async list_serv_subscription(cmd_str,roomname,emailaddr,url,supplied_token) {
         let cmdstr = `LSUB ${cmd_str}|${roomname}|${emailaddr}|${url}|${supplied_token}`
         let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            return output   // ?? have to go through code to see what this is
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -4788,7 +4896,12 @@ RVcard
         else state = 1
         let cmdstr = `ASYN ${state}`
         let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            return output   // ?? have to go through code to see what this is
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
@@ -4800,7 +4913,12 @@ RVcard
     async get_inbox_rules() {
         let cmdstr = 'GIBR'
         let resp = await this.safe_client_write(cmdstr)
-        return this.handle_generic_response(resp)
+        if ( this.response_is_good(resp) ) {
+            let output = this.handle_generic_response(resp)
+            return output   // ?? have to go through code to see what this is
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+        return false
     }
 
 
