@@ -3,7 +3,6 @@
 const net = require('net')
 const fs = require('fs')
 const mime = require('mime/lite')
-const { cat } = require('../alphas/copious-transition-apps/captcha-igid-merged/lib/third-party-db/general_media_types')
 //
 
 
@@ -1109,7 +1108,7 @@ class ClientOPs {
             }
             this.failed_data = (data) => {
                 this.free_download = false
-                reject(false)
+                reject(false)clientWrite(
             }
         })
         return(p)
@@ -1210,7 +1209,7 @@ class ClientOPs {
      * 
      * @param {*} text 
      */
-    async send_text(text) {
+    send_text(text) {
         this.uploading = true
         this.client.write(`${text}\n000\n`,(err) => {
             this.uploading = false
@@ -2532,7 +2531,7 @@ class CitadelClient extends ClientOPs {
      * @param {boolean} copy 
      * @returns 
      */
-    async  move_message(msgnum,destroom) {
+    async move_message(msgnum,destroom) {
         let cmdstr = `MOVE ${msgnum}|${destroom}|0`
         let resp = await this.safe_client_write(cmdstr)
         if ( this.response_is_good(resp) ) {
@@ -2570,7 +2569,7 @@ class CitadelClient extends ClientOPs {
      * @param {boolean} copy 
      * @returns 
      */
-    async  copy_message(msgnum,destroom) {
+    async copy_message(msgnum,destroom) {
         let cmdstr = `MOVE ${msgnum}|${destroom}|1`
         let resp = await this.safe_client_write(cmdstr)
         if ( this.response_is_good(resp) ) {
@@ -2661,7 +2660,8 @@ class CitadelClient extends ClientOPs {
      * // ENT0
      * > acually post a message. Perhaps, send an email to someone via SMTP
      * 
-     * 
+     * if recipients, the message goes to SENTITEMS room (msgbase.c)
+     * otherwise ... it goes to the current room (by context)
      * 
      * confirmation message:
 ``` 
@@ -2761,7 +2761,7 @@ class CitadelClient extends ClientOPs {
      * 
      * @returns {Array}
      */
-    async get_valid_email_addresses() {
+    async get_vcard_addresses() {
         let cmdstr = 'DVCA'
         let resp = await this.safe_client_write(cmdstr)
         let output = this.handle_generic_response(resp)
@@ -4574,6 +4574,18 @@ Content-Type (such as image/gif), and the character set (always empty).
 //   "REGI" : 113,
 //   "CHEK" : 114,
 
+/**
+ * from serv_cvcard.c
+ * 
+ 		register_proto_hook(cmd_regi, "REGI", "Enter registration info");
+		register_proto_hook(cmd_greg, "GREG", "Get registration info");
+		register_proto_hook(cmd_qdir, "QDIR", "Query Directory");
+		register_proto_hook(cmd_rbdi, "RBDI", "ReBuild Directory Index");
+		register_proto_hook(cmd_gvsn, "GVSN", "Get Valid Screen Names");
+		register_proto_hook(cmd_gvea, "GVEA", "Get Valid Email Addresses");
+		register_proto_hook(cmd_dvca, "DVCA", "Dump VCard Addresses");
+
+ */
     /**
      * // RENU : 110,
      * 
@@ -4659,7 +4671,8 @@ RVcard
      * // REGI : 113
      * 
      * SEND_LISTING
-     * (deprepcated)
+     * (deprepcated -- but then not really)
+     * Currently being used in the latest webcit
      * 
      * submit the following as a vCard (with MIME type "text/x-vcard") to the user's "My Citadel Config" room
      * 
@@ -4679,6 +4692,26 @@ RVcard
         return "deprecated"
     }
 
+
+    async add_contact(contact) {
+        let cmdstr = 'REGI'
+        let resp = await this.safe_client_write(cmdstr)
+        if ( this.send_listing(resp) ) {
+            let listing = ""
+            //
+            listing += `${contact.name}\n`
+            listing += `${contact.address}\n`
+            listing += `${contact.city}\n`
+            listing += `${contact.postal}\n`
+            listing += `${contact.telephon}\n`
+            listing += `${contact.email}\n`
+            listing += `${contact.country}\n`
+            //
+            this.send_text(listing)
+            return true
+        }
+        this.add_error_string(this.handle_generic_response(resp))
+    }
 
     
     /**
